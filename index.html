@@ -1153,7 +1153,8 @@ function buildFlow(chart,targetDate,targetTimeIndex,effTarget){
   var t=targetDate; // solar2lunar
   var et=effTarget||t; // 晚子时流盘目标：日/时干支按次日
   var tLate=targetTimeIndex===12;
-  var nominalAge=t.lYear-b.lYear+1;
+  // 虚岁按公历年（2026=45、2027=46），与流年干支（公历年）一致；不能用农历年——公历年初农历还在上一年会错位
+  var nominalAge=t.cYear-b.cYear+1;
   // 大限（虚岁可能为负/超界：回落到命宫所在大限，保证不崩）
   var decIdx=-1;
   for(var i=0;i<12;i++){
