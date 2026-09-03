@@ -134,16 +134,16 @@
   /* 单格主体：三列（左 杂曜/十二神 · 中 主星 · 右 八吉六煞/流耀） */
   .cell-main-area{position:relative;flex:1;display:grid;grid-template-columns:auto 1fr auto;gap:2px;min-height:0;}
   .cell-left{display:flex;flex-direction:column;justify-content:space-between;min-height:0;overflow:hidden;gap:4px;}
-  /* 杂曜：横向并列排（寡宿 天德 …每个竖排一列）；楷体规整 + 固定列宽，避免字宽差异导致错位 */
-  .cell-adj{display:flex;flex-wrap:wrap;justify-content:center;align-items:flex-start;gap:2px 6px;margin-top:1px;}
+  /* 杂曜：横向并列排（寡宿 天德 …每个竖排一列）；靠左对齐；固定列宽避免字宽差异错位 */
+  .cell-adj{display:flex;flex-wrap:wrap;justify-content:flex-start;align-items:flex-start;gap:2px 6px;margin-top:1px;}
   .cell-adj .star.adj{
     writing-mode:vertical-rl;text-orientation:upright;
     font-family:"PMingLiU","MingLiU","PMingLiU-ExtB",serif;
     font-size:13.5px;color:var(--ink-soft);line-height:1.12;
     display:inline-block;width:15px;text-align:center;vertical-align:top;text-indent:0;letter-spacing:0;
   }
-  /* 十二神：横向并列排 */
-  .cell-gods{display:flex;flex-wrap:wrap;justify-content:center;align-items:flex-start;gap:3px 6px;margin-bottom:1px;}
+  /* 十二神：横向并列排；靠左对齐 */
+  .cell-gods{display:flex;flex-wrap:wrap;justify-content:flex-start;align-items:flex-start;gap:3px 6px;margin-bottom:1px;}
   .cell-gods span{
     writing-mode:vertical-rl;text-orientation:upright;
     font-family:"PMingLiU","MingLiU","PMingLiU-ExtB",serif;
@@ -162,25 +162,25 @@
   }
   .vstar{
     writing-mode:vertical-rl;text-orientation:upright;
-    font-size:16px;line-height:1.15;font-weight:700;letter-spacing:1px;
+    font-size:18px;line-height:1.15;font-weight:700;letter-spacing:1px;
   }
   /* 亮度、四化：写在主星下方，字号与主星一致 */
-  .vstar .b{font-size:16px;color:var(--ink-soft);font-weight:400;}
-  .vstar .mu{font-size:16px;font-weight:700;}
+  .vstar .b{font-size:18px;color:var(--ink-soft);font-weight:400;}
+  .vstar .mu{font-size:18px;font-weight:700;}
   .vstar .mu.mu-lu{color:var(--muta-lu);}
   .vstar .mu.mu-quan{color:var(--muta-quan);}
   .vstar .mu.mu-ke{color:var(--muta-ke);}
   .vstar .mu.mu-ji{color:var(--muta-ji);}
   /* 流盘层四化：按层级着色（大限粉 / 流年蓝 / 流月青 / 流日橙 / 流时紫） */
-  .vstar .mu.mu-layer{opacity:.95;font-size:14px;}
+  .vstar .mu.mu-layer{opacity:.95;font-size:18px;}
   .vstar .mu.mu-layer.decadal{color:#d2558a;}
   .vstar .mu.mu-layer.yearly{color:#2f6db3;}
   .vstar .mu.mu-layer.monthly{color:#2f8f6a;}
   .vstar .mu.mu-layer.daily{color:#c07a2f;}
   .vstar .mu.mu-layer.hourly{color:#6a5fb0;}
-  /* 八吉六煞：右侧并列排（铃星闲 地空平 …金色/红色） */
+  /* 八吉六煞：右侧并列排（铃星闲 地空平 …金色/红色）；靠右对齐，右缘留内边距防裁剪 */
   .cell-right{display:flex;flex-direction:column;justify-content:space-between;min-height:0;overflow:hidden;gap:4px;}
-  .cell-minor{display:flex;flex-wrap:wrap;justify-content:center;align-items:flex-start;gap:3px 6px;margin-top:1px;}
+  .cell-minor{display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:flex-start;gap:3px 6px;margin-top:1px;padding-right:3px;}
   .vminor{
     writing-mode:vertical-rl;text-orientation:upright;
     font-family:"PMingLiU","MingLiU","PMingLiU-ExtB",serif;
@@ -1344,9 +1344,9 @@ function renderCenter(chart,flow,layer,flowTitle){
       var d=+b.getAttribute('data-d');
       var nav={origin:{a:function(dir){var el=document.getElementById('bt');el.value=fixIndex(+el.value+dir,13);IS_PANNED=true;render();}},
         decadal:{a:function(dir){STATE_DEC_OFFSET+=dir;render();}},
-        yearly:{a:function(dir){var el=document.getElementById('fy');el.value=+el.value+dir;IS_PANNED=true;render();}},
-        monthly:{a:function(dir){var fy=document.getElementById('fy'),fm=document.getElementById('fm');var m=+fm.value+dir,y=+fy.value;if(m>12){m=1;y++;}if(m<1){m=12;y--;}fm.value=m;fy.value=y;IS_PANNED=true;render();}},
-        daily:{a:function(dir){var fy=document.getElementById('fy'),fm=document.getElementById('fm'),fd=document.getElementById('fd');var dt=new Date(+fy.value,+fm.value-1,+fd.value+dir);fy.value=dt.getFullYear();fm.value=dt.getMonth()+1;fd.value=dt.getDate();IS_PANNED=true;render();}},
+        yearly:{a:function(dir){var el=document.getElementById('fy');el.value=(+el.value||new Date().getFullYear())+dir;IS_PANNED=true;render();}},
+        monthly:{a:function(dir){var fy=document.getElementById('fy'),fm=document.getElementById('fm');var now=new Date();var m=(+fm.value||now.getMonth()+1)+dir,y=(+fy.value||now.getFullYear());if(m>12){m=1;y++;}if(m<1){m=12;y--;}fm.value=m;fy.value=y;IS_PANNED=true;render();}},
+        daily:{a:function(dir){var fy=document.getElementById('fy'),fm=document.getElementById('fm'),fd=document.getElementById('fd');var now=new Date();var y=+fy.value||now.getFullYear(),m=+fm.value||now.getMonth()+1,d=+fd.value||now.getDate();var dt=new Date(y,m-1,d+dir);fy.value=dt.getFullYear();fm.value=dt.getMonth()+1;fd.value=dt.getDate();IS_PANNED=true;render();}},
         hourly:{a:function(dir){var el=document.getElementById('ft');el.value=fixIndex(+el.value+dir,13);IS_PANNED=true;render();}},
         age:{a:function(dir){STATE_AGE_OFFSET+=dir;render();}}}[layer];
       nav.a(d);
