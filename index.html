@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>紫微斗数排盘</title>
+<script>
+/* 域名授权校验（第一层）：仅允许 https://cheanshun.github.io/ziwei/ 运行 */
+(function(){
+  function _c(){var s=[99,104,101,97,110,115,104,117,110,46,103,105,116,104,117,98,46,105,111],h='';for(var i=0;i<s.length;i++){h+=String.fromCharCode(s[i]);}var hn=(location.hostname||'').toLowerCase(),pn=(location.pathname||'').toLowerCase();return hn===h&&(pn==='\x2fziwei'||pn.indexOf('\x2fziwei\x2f')===0);}
+  window.__LOCKED=!_c();
+})();
+</script>
 <style>
   :root{
     --paper:#eef1f0;
@@ -480,6 +487,22 @@
 </div>
 
 <script>
+/* =====================================================================
+   授权校验（第二层，核心逻辑防剥离）：仅允许 cheanshun.github.io/ziwei/ 运行
+   ===================================================================== */
+(function(){
+  function _c(){var s=[99,104,101,97,110,115,104,117,110,46,103,105,116,104,117,98,46,105,111],h='';for(var i=0;i<s.length;i++){h+=String.fromCharCode(s[i]);}var hn=(location.hostname||'').toLowerCase(),pn=(location.pathname||'').toLowerCase();return hn===h&&(pn==='\x2fziwei'||pn.indexOf('\x2fziwei\x2f')===0);}
+  var ok=window.__LOCKED!==true&&_c();
+  if(!ok){
+    document.write('<div style="position:fixed;left:0;top:0;right:0;bottom:0;z-index:999999;background:#f3f4f3;display:flex;align-items:center;justify-content:center;font-family:PMingLiU,SimSun,serif;color:#333;"><div style="text-align:center;padding:30px 40px;line-height:2;">'
+      +'<div style="font-size:28px;font-weight:bold;color:#a33a2c;">紫微斗数排盘 · 授权受限</div>'
+      +'<div style="font-size:16px;margin-top:14px;color:#555;">本排盘仅授权在以下域名运行：</div>'
+      +'<div style="font-size:20px;font-weight:bold;color:#a33a2c;margin-top:8px;">https://cheanshun.github.io/ziwei/</div>'
+      +'<div style="font-size:13px;color:#999;margin-top:18px;max-width:420px;">未经授权下载到本地或其他域名打开，排盘功能将无法使用。<br>如需使用，请访问上述官方地址。</div>'
+      +'</div></div>');
+    throw new Error('AUTH');
+  }
+})();
 /* =====================================================================
    一、农历转换（经典 calendar.js 算法，数据表 1900-2100）
    ===================================================================== */
