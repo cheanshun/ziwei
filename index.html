@@ -448,6 +448,7 @@
       <button class="btn" id="btnCalc">排 盘</button>
       <button class="btn2" id="btnHide">隐藏生辰信息</button>
       <button class="btn2" id="btnSave">保存图片</button>
+      <button class="btn2" id="btnRandom">随机排盘</button>
     </div>
   </div>
 
@@ -621,10 +622,10 @@ var WUXING=['木','金','水','火','土']; // 纳音差 1-5
 var WUXING_NUM={木:3,金:4,水:2,火:6,土:5};
 var WUXING_NAME={水:'水二局',木:'木三局',金:'金四局',土:'土五局',火:'火六局'};
 /* 四化（中州派）：
-   甲廉破武阳 乙机梁紫阴 丙同机昌廉 丁阴同机巨 戊贪机阴阳 己武贪梁曲 庚阳武府同 辛巨阳曲昌 壬梁紫府武 癸破巨阴贪 */
+   甲廉破武阳 乙机梁紫阴 丙同机昌廉 丁阴同机巨 戊贪阴太阳忌 己武贪梁曲 庚阳武府同 辛巨阳曲昌 壬梁紫府武 癸破巨阴贪 */
 var MUTAGEN={
   甲:['廉贞','破军','武曲','太阳'],乙:['天机','天梁','紫微','太阴'],丙:['天同','天机','文昌','廉贞'],
-  丁:['太阴','天同','天机','巨门'],戊:['贪狼','天机','太阳','太阴'],己:['武曲','贪狼','天梁','文曲'],
+  丁:['太阴','天同','天机','巨门'],戊:['贪狼','太阴','太阳','天机'],己:['武曲','贪狼','天梁','文曲'],
   庚:['太阳','武曲','天府','天同'],辛:['巨门','太阳','文曲','文昌'],壬:['天梁','紫微','天府','武曲'],
   癸:['破军','巨门','太阴','贪狼']
 };
@@ -1691,6 +1692,25 @@ function init(){
       ft:document.getElementById('ft').value};
     STATE_ASTRO='origin';STATE_LAYER='origin';STATE_DEC_OFFSET=0;STATE_AGE_OFFSET=0;
     IS_PANNED=true;render();
+  });
+  // 随机排盘：随机公历生日（1901-2099 内有效日期）+ 随机时辰，取消农历勾选后起盘
+  document.getElementById('btnRandom').addEventListener('click',function(){
+    var y=1901+Math.floor(Math.random()*199);
+    var m=1+Math.floor(Math.random()*12);
+    var maxD=new Date(y,m,0).getDate();
+    var d=1+Math.floor(Math.random()*maxD);
+    var t=Math.floor(Math.random()*13); // 0-12（含晚子时）
+    var cal=document.getElementById('isLunar');
+    if(cal.checked){
+      cal.checked=false;
+      if(document.getElementById('isLeap'))document.getElementById('isLeap').checked=false;
+      cal.dispatchEvent(new Event('change')); // 同步「公历/农历」标签与闰月选项
+    }
+    document.getElementById('by').value=y;
+    document.getElementById('bm').value=m;
+    document.getElementById('bd').value=d;
+    document.getElementById('bt').value=t;
+    document.getElementById('btnCalc').click();
   });
   // 宫位点击高亮：本宫（红）+ 三方四正（金橙），再点一次取消
   function sanFangSiZheng(idx){ // idx = 网格索引（寅起 0-11）
