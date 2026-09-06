@@ -100,6 +100,20 @@
   .modebar .m-label{font-size:13px;color:var(--ink-soft);letter-spacing:1px;}
   .flow-info{font-size:13px;color:var(--ink-soft);}
   .flow-info b{color:var(--cinnabar);font-weight:600;}
+  /* ===== 存盘列表（本地 localStorage，无需账号） ===== */
+  .saves{max-width:1200px;margin:10px auto 0;padding:8px 14px;background:#ffffff;border:1px solid var(--line);border-radius:8px;}
+  .saves-head{display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap;}
+  .saves-title{font-size:13px;color:var(--ink-soft);letter-spacing:2px;white-space:nowrap;}
+  .saves-search{flex:0 0 160px;font-family:inherit;font-size:13px;border:1px solid var(--line);border-radius:5px;padding:4px 8px;color:var(--ink);}
+  .saves-search:focus{outline:none;border-color:var(--cinnabar);}
+  .saves-list{display:flex;flex-wrap:wrap;gap:6px;max-height:112px;overflow-y:auto;}
+  .save-item{display:inline-flex;align-items:center;gap:6px;font-family:inherit;font-size:13px;color:var(--ink);background:#f5f6f5;border:1px solid var(--line-soft);border-radius:6px;padding:3px 8px;cursor:pointer;transition:border-color .15s,color .15s;white-space:nowrap;}
+  .save-item:hover{border-color:var(--cinnabar);color:var(--cinnabar);}
+  .save-item b{font-weight:600;}
+  .save-item .s-sub{font-size:11.5px;color:var(--ink-soft);}
+  .save-del{font-size:12px;color:#b0b0b0;padding:0 2px;cursor:pointer;border:none;background:none;font-family:inherit;line-height:1;}
+  .save-del:hover{color:var(--cinnabar);}
+  .saves-empty{font-size:12.5px;color:#b9bcba;padding:4px 2px;}
   /* ===== 主盘 ===== */
   .chart{
     display:grid;
@@ -449,7 +463,16 @@
       <button class="btn2" id="btnHide">隐藏生辰信息</button>
       <button class="btn2" id="btnSave">保存图片</button>
       <button class="btn2" id="btnRandom">随机排盘</button>
+      <button class="btn2" id="btnSaveDisk">存 盘</button>
     </div>
+  </div>
+
+  <div class="saves">
+    <div class="saves-head">
+      <span class="saves-title">存盘列表</span>
+      <input type="text" id="saveSearch" placeholder="搜索名字…" class="saves-search" autocomplete="off">
+    </div>
+    <div class="saves-list" id="saveList"></div>
   </div>
 
   <div class="modebar">
@@ -1712,6 +1735,82 @@ function init(){
     document.getElementById('bt').value=t;
     document.getElementById('btnCalc').click();
   });
+  // 存盘（本地 localStorage，无需账号；数据保存在当前浏览器）
+  var SAVE_KEY='ziwei_saves_v1';
+  function escHtml(s){return String(s).replace(/[&<>"']/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];});}
+  function pad2(n){return (n<10?'0':'')+n;}
+  function getSaves(){try{var v=JSON.parse(localStorage.getItem(SAVE_KEY));return Array.isArray(v)?v:[];}catch(e){return[];}}
+  function putSaves(a){try{localStorage.setItem(SAVE_KEY,JSON.stringify(a));}catch(e){}}
+  function readGender(){var s=document.querySelector('#genderSeg .seg-item.on');return s?s.getAttribute('data-v'):'male';}
+  function setGender(g){
+    document.querySelectorAll('#genderSeg .seg-item').forEach(function(x){
+      x.classList.toggle('on',x.getAttribute('data-v')===g);
+    });
+  }
+  function loadSave(s){
+    document.getElementById('by').value=s.by;
+    document.getElementById('bm').value=s.bm;
+    document.getElementById('bd').value=s.bd;
+    document.getElementById('bt').value=s.bt;
+    setGender(s.gender||'male');
+    var cal=document.getElementById('isLunar');
+    if(!!cal.checked!==!!s.isLunar){
+      cal.checked=!!s.isLunar;
+      if(document.getElementById('isLeap'))document.getElementById('isLeap').checked=!!s.isLeap;
+      cal.dispatchEvent(new Event('change'));
+    }
+    document.getElementById('btnCalc').click();
+  }
+  function renderSaves(){
+    var q=(document.getElementById('saveSearch').value||'').trim();
+    var saves=getSaves();
+    var list=document.getElementById('saveList');
+    list.innerHTML='';
+    var hit=saves.filter(function(s){return s.name.indexOf(q)>=0;});
+    if(!hit.length){
+      list.innerHTML='<span class="saves-empty">'+(saves.length?'无匹配的存盘':'暂无存盘，排盘后点「存 盘」保存')+'</span>';
+      return;
+    }
+    hit.forEach(function(s){
+      var it=document.createElement('span');
+      it.className='save-item';
+      it.title='点击载入：'+s.name;
+      it.innerHTML='<b>'+escHtml(s.name)+'</b><span class="s-sub">'+escHtml(s.by)+'-'+pad2(s.bm)+'-'+pad2(s.bd)+' '+escHtml(s.gender==='male'?'男':'女')+'</span>';
+      it.addEventListener('click',function(){loadSave(s);});
+      var del=document.createElement('button');
+      del.className='save-del';del.textContent='✕';
+      del.setAttribute('title','删除此存盘');
+      del.addEventListener('click',function(ev){
+        ev.stopPropagation();
+        if(confirm('删除存盘「'+s.name+'」？')){
+          var a=getSaves();
+          for(var i=0;i<a.length;i++){
+            if(a[i].name===s.name&&a[i].by===s.by&&a[i].bm===s.bm&&a[i].bd===s.bd){a.splice(i,1);break;}
+          }
+          putSaves(a);renderSaves();
+        }
+      });
+      it.appendChild(del);
+      list.appendChild(it);
+    });
+  }
+  document.getElementById('btnSaveDisk').addEventListener('click',function(){
+    if(!IS_PANNED){alert('请先排盘再存盘');return;}
+    var by=document.getElementById('by').value,bm=document.getElementById('bm').value,bd=document.getElementById('bd').value;
+    var bt=document.getElementById('bt').value;
+    var gender=readGender();
+    var cal=document.getElementById('isLunar').checked,leap=document.getElementById('isLeap').checked;
+    var defName='命盘 '+by+'-'+pad2(+bm||1)+'-'+pad2(+bd||1)+(gender==='male'?' 男':' 女');
+    var name=prompt('输入命盘名称：',defName);
+    if(name===null)return;
+    name=name.trim();
+    if(!name){alert('名称不能为空');return;}
+    var saves=getSaves();
+    saves.unshift({name:name,by:+by,bm:+bm,bd:+bd,bt:+bt,gender:gender,isLunar:cal,isLeap:leap,savedAt:Date.now()});
+    putSaves(saves);renderSaves();
+  });
+  document.getElementById('saveSearch').addEventListener('input',renderSaves);
+  renderSaves();
   // 宫位点击高亮：本宫（红）+ 三方四正（金橙），再点一次取消
   function sanFangSiZheng(idx){ // idx = 网格索引（寅起 0-11）
     var zhi=(idx+2)%12; // 子起地支索引
@@ -1726,13 +1825,10 @@ function init(){
     var was=cell.classList.contains('hl');
     // 清除全部高亮
     grid.querySelectorAll('.cell.hl,.cell.hl-sf').forEach(function(c){c.classList.remove('hl','hl-sf');});
-    // 恢复被隐藏的命宫三方四正底色
+    // 恢复被隐藏的命宫三方四正底色（含大限/流年等盘面的层级命宫格）；同时强制清除高亮类，防止取消后高亮残留
     grid.querySelectorAll('.cell.hl-dim').forEach(function(c){
       c.classList.remove('hl-dim');
-      var o=c.dataset.orig;
-      if(o==='cur'){c.classList.add('cur');}
-      else if(o==='sf'){c.classList.add('sf');}
-      delete c.dataset.orig;
+      if(c.dataset.orig){c.className=c.dataset.orig;c.classList.remove('hl','hl-sf');delete c.dataset.orig;}
     });
     if(was)return; // 本次取消高亮，底色已恢复
     var sf=sanFangSiZheng(idx);
@@ -1742,14 +1838,13 @@ function init(){
       var ci=parseInt(cells[k].dataset.idx,10);
       if(!isNaN(ci)&&ci!==idx&&sf.indexOf(ci)>=0){cells[k].classList.add('hl-sf');}
     }
-    // 点击非命宫时：命宫淡粉底及命宫三方四正淡金底让位隐藏（避免双重焦点）
-    if(!(cell.classList.contains('cur')||cell.classList.contains('ming'))){
-      grid.querySelectorAll('.cell.cur,.cell.sf').forEach(function(c){
-        c.dataset.orig=c.classList.contains('cur')?'cur':'sf';
-        c.classList.remove('cur','sf');
-        c.classList.add('hl-dim');
-      });
-    }
+    // 点击任意宫位：命宫淡粉底（.cur）、当前盘面命宫层级淡底（.ming）及命宫三方四正淡金底（.sf）全部让位隐藏，
+    // 只保留本次点击高亮（本宫红 + 三方四正金），确保其他宫位无任何颜色变化
+    grid.querySelectorAll('.cell.cur,.cell.sf,.cell.ming').forEach(function(c){
+      c.dataset.orig=c.className;
+      c.classList.remove('cur','sf','ming');
+      c.classList.add('hl-dim');
+    });
   });
   ['by','bm','bd','bt','fy','fm','fd','ft'].forEach(function(id){
     var el=document.getElementById(id);
