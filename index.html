@@ -114,6 +114,29 @@
   .save-del{font-size:12px;color:#b0b0b0;padding:0 2px;cursor:pointer;border:none;background:none;font-family:inherit;line-height:1;}
   .save-del:hover{color:var(--cinnabar);}
   .saves-empty{font-size:12.5px;color:#b9bcba;padding:4px 2px;}
+  /* ===== 断语面板 ===== */
+  .reading{max-width:1200px;margin:10px auto 0;padding:0 2px;display:none;}
+  .reading.show{display:block;}
+  .rd-box{background:#ffffff;border:1px solid var(--line);border-radius:10px;padding:12px 16px;box-shadow:0 2px 10px rgba(60,80,90,.06);}
+  .rd-title{font-size:15px;font-weight:700;letter-spacing:2px;color:var(--cinnabar);margin-bottom:8px;border-bottom:1px solid var(--line-soft);padding-bottom:6px;}
+  .rd-sec{margin-top:9px;}
+  .rd-sec-t{font-size:13.5px;font-weight:700;color:var(--seal);letter-spacing:1px;margin-bottom:4px;}
+  .rd-sec-t.natal{color:#a33a2c;}
+  .rd-sec-t.decadal{color:#d2558a;}
+  .rd-sec-t.yearly{color:#2f6db3;}
+  .rd-sec-t.age{color:#a08a4c;}
+  .rd-sec-t.monthly{color:#2f8f6a;}
+  .rd-sec-t.daily{color:#c07a2f;}
+  .rd-sec-t.hourly{color:#6a5fb0;}
+  .rd-line{font-size:13.5px;color:var(--ink);line-height:1.95;margin:2px 0;}
+  .rd-line .rd-k{color:var(--cinnabar);font-weight:700;}
+  .rd-line.mu-lu{color:#1f7a4d;}
+  .rd-line.mu-quan{color:#a33a2c;}
+  .rd-line.mu-ke{color:#2c6a94;}
+  .rd-line.mu-ji{color:#7c2440;}
+  .rd-line.rd-good{color:#1f5c3d;}
+  .rd-line.rd-bad{color:#8a3a2e;}
+  .rd-line.rd-kj{color:#5a3a7a;font-weight:600;}
   /* ===== 主盘 ===== */
   .chart{
     display:grid;
@@ -506,6 +529,7 @@
 
   <div class="chart" id="chart"></div>
 
+  <div class="reading" id="reading"></div>
   <div class="legend">
     <span class="li"><span class="sw mu-lu"></span>化禄</span>
     <span class="li"><span class="sw mu-quan"></span>化权</span>
@@ -1299,6 +1323,542 @@ function flowMuHtml(name,muMap){
   return '<span class="flow-mu '+muCls[muMap[name]]+'">'+esc(muMap[name])+'</span>';
 }
 
+/* =====================================================================
+   断语系统：点击宫位 → 命盘下方显示该宫位断语
+   结构：宫位主题 → 主星(亮度) → 主星组合 → 本命四化 → 八吉六煞
+        → 杂曜对星(三方四正成对) → 长生十二神(绝/临官) → 口诀 → 三方四正互动
+        → 当前盘面层级断语（大限/流年/流月/流日/流时/小限）
+   ===================================================================== */
+var RD_PALACE={
+  '命宫':'论一生格局、性格气象与人生走向的总枢，代表自我形象与行事风格',
+  '兄弟':'论手足缘分、同辈助力，以及兄弟朋友对命主的影响',
+  '夫妻':'论婚姻感情、配偶缘分，以及两性关系的相处模式',
+  '子女':'论子女缘分、教养成就，以及合夥、桃色、晚辈际遇',
+  '财帛':'论财源聚散、理财能力与金钱运势',
+  '疾厄':'论体质强弱、健康隐忧与情绪压力',
+  '迁移':'论外出发展、远行际遇、社交应酬与环境适应力',
+  '仆役':'论交友部属、人际关系网络，以及受助力或拖累',
+  '官禄':'论事业成就、职场发展、社会地位与命主的上进心',
+  '田宅':'论房产家运、积蓄库藏、家庭环境与晚年依靠',
+  '福德':'论精神享受、福分深浅、内心世界与晚运',
+  '父母':'论父母缘分、文书契约、上司长辈，以及名声信用'
+};
+var RD_STAR_NATURE={
+  '紫微':'帝座之星，主贵气、领导统御，喜得百官朝拱',
+  '天机':'智谋之星，主思虑机变、善于策划，性喜动',
+  '太阳':'光明之星，主付出、名声与气度，官禄主',
+  '武曲':'财星，主刚毅果决、开创进取，性偏刚',
+  '天同':'福星，主安逸随和、协调福气，性偏柔',
+  '廉贞':'次桃花、囚星，主原则是非，外圆内方',
+  '天府':'财库，主稳重守成、包容宽厚',
+  '太阴':'田宅财帛主，主内敛温润、精于理财',
+  '贪狼':'桃花星，主欲望交际、才艺广博，善结人缘',
+  '巨门':'暗星、口舌星，主是非与口才，须防招惹',
+  '天相':'印星，主辅佐协调、端正有礼',
+  '天梁':'荫星，主庇荫解厄、清高正直，逢凶化吉',
+  '七杀':'将星，主冲劲杀伐、果断敢为',
+  '破军':'耗星，主开创变动、破旧立新'
+};
+var RD_BRIGHT={
+  '庙':'庙旺得地，力量发挥最充分，格局最高',
+  '旺':'旺地得力，气势强旺，行事多有成果',
+  '平':'平地平常，吉凶参半，须靠努力补足',
+  '陷':'落陷失势，力量不足，须防阻碍与反复',
+  '地':'受制之地，力量受限，宜守不宜攻'
+};
+var RD_MU={禄:'化禄：财禄顺遂，多得助力，是财气与福气的象征',权:'化权：掌权主动，魄力与掌控力增强，易掌实权',科:'化科：声名显达，贵人提携，利考试文书名声',忌:'化忌：主阻碍困扰，宜谨慎守成，防失财失人'};
+var RD_AUSP={
+  '左辅':'左辅：得同辈助力，朋友同事相扶',
+  '右弼':'右弼：得暗中相助，贵人从中玉成',
+  '文昌':'文昌：主文书才艺，科甲声名，利考试',
+  '文曲':'文曲：主才艺口才，文艺出众，利才艺名声',
+  '天魁':'天魁：天乙贵人，逢凶化吉，得男贵相助',
+  '天钺':'天钺：天乙贵人，多逢凶化吉，得女贵相助',
+  '禄存':'禄存：财帛丰足，守财有道，多实利',
+  '天马':'天马：主变动出行，动中得财，宜外出发展'
+};
+var RD_MALF={
+  '擎羊':'擎羊：刑伤之星，主是非破耗，须防意外',
+  '陀罗':'陀罗：拖延之星，主纠缠迟滞，须防反复',
+  '火星':'火星：急躁之星，主突发爆发，来得快去得快',
+  '铃星':'铃星：暗火之星，主突来暗耗，须防暗中生变',
+  '地空':'地空：空亡之星，主理想落空，须防虚耗',
+  '地劫':'地劫：劫耗之星，主损失波折，须防破财'
+};
+var RD_PAIRS={
+  '龙池':'凤阁','红鸾':'天喜','三台':'八座','恩光':'天贵','天哭':'天虚',
+  '孤辰':'寡宿','台辅':'封诰','大耗':'小耗','天德':'月德','天姚':'天刑',
+  '解神':'天巫','天福':'天厨','华盖':'咸池','天伤':'蜚廉','天月':'天刑'
+};
+var RD_PAIR_TXT={
+  '龙池凤阁':'龙池凤阁并见：主文采出众，艺业有成',
+  '红鸾天喜':'红鸾天喜并见：主婚庆之喜，人际和顺',
+  '三台八座':'三台八座并见：主地位提升，步步高升',
+  '恩光天贵':'恩光天贵并见：主受恩宠，得贵人提携',
+  '天哭天虚':'天哭天虚并见：主多忧少喜，须防心绪低落',
+  '孤辰寡宿':'孤辰寡宿并见：主性情孤高，独来独往',
+  '台辅封诰':'台辅封诰并见：主名誉彰显，受褒扬',
+  '大耗小耗':'大耗小耗并见：主破耗，须防财物损失',
+  '天德月德':'天德月德并见：主逢凶化吉，福泽庇佑',
+  '天姚天刑':'天姚天刑并见：主桃色是非，须防感情纠纷',
+  '解神天巫':'解神天巫并见：主贵人解厄，化险为夷',
+  '天福天厨':'天福天厨并见：主福泽口福，衣食无忧',
+  '华盖咸池':'华盖咸池并见：主才华风流，须防情缘纠葛',
+  '天伤蜚廉':'天伤蜚廉并见：主暗中是非，须防小人',
+  '天月天刑':'天月天刑并见：主劳心费神，须防疾厄'
+};
+/* 杂曜对星·疾厄宫健康版（疾厄宫断语用健康角度） */
+var RD_PAIR_HEALTH={
+  '龙池凤阁':'龙池凤阁并见：主呼吸通畅、文雅养生，防耳鼻喉之疾',
+  '红鸾天喜':'红鸾天喜并见：主妇科、内分泌调畅，防桃花致病',
+  '三台八座':'三台八座并见：主骨骼腰椎强健，防筋骨劳损',
+  '恩光天贵':'恩光天贵并见：主得良医良药，病可逢凶化吉',
+  '天哭天虚':'天哭天虚并见：主情绪抑郁、虚耗之疾，宜调心神',
+  '孤辰寡宿':'孤辰寡宿并见：主孤独症结、神经衰弱，宜多交际',
+  '台辅封诰':'台辅封诰并见：主得名医诊疗，体面就医',
+  '大耗小耗':'大耗小耗并见：主元气虚耗、慢性损耗，宜补养',
+  '天德月德':'天德月德并见：主逢凶化吉，病灾可解',
+  '天姚天刑':'天姚天刑并见：主暗疾炎症、妇科之疾，防反复',
+  '解神天巫':'解神天巫并见：主解除病厄，疑难可解',
+  '天福天厨':'天福天厨并见：主饮食有福，防过食伤身',
+  '华盖咸池':'华盖咸池并见：主情志郁结、泌尿之疾，宜疏泄',
+  '天伤蜚廉':'天伤蜚廉并见：主意外小伤、皮肤之疾，防破伤',
+  '天月天刑':'天月天刑并见：主慢性病反复，宜长期调养'
+};
+var RD_CS_SPECIAL={绝:'绝地：气机到此断绝，主该阶段低谷潜沉，宜守成蓄力，静待转机',临官:'临官：正当得势之时，主该阶段事业顺遂，名利有望'};
+/* 长生十二神全系断语（流盘重点） */
+var RD_CS12_ALL={
+  '长生':'长生：生机萌发，此阶段事物开端顺遂',
+  '沐浴':'沐浴：桃花沐浴，须防情欲纠葛',
+  '冠带':'冠带：渐入佳境，名位初成',
+  '临官':'临官：正当得势，事业顺遂，名利有望',
+  '帝旺':'帝旺：气运最旺，如日中天',
+  '衰':'衰：由盛转衰，宜守不宜攻',
+  '病':'病：气运受挫，须防劳损',
+  '死':'死：气机沉寂，宜静待转机',
+  '墓':'墓：收藏蓄积，宜守成不宜开创',
+  '绝':'绝：气机断绝，此阶段低谷潜沉，宜蓄力待变',
+  '胎':'胎：孕育萌动，新机潜藏',
+  '养':'养：休养生息，蓄势待发'
+};
+/* 博士十二神（流年变化）断语 */
+var RD_BS12={
+  '博士':'博士：聪明才学，利文书考试',
+  '力士':'力士：权威有力，行事果决',
+  '青龙':'青龙：喜事临门，贵人相助',
+  '小耗':'小耗：破耗小损，防零碎开支',
+  '将军':'将军：气势威猛，利开创',
+  '奏书':'奏书：文书有利，上书得准',
+  '飞廉':'飞廉：变动是非，防小人',
+  '喜神':'喜神：喜事将近，心情愉悦',
+  '病符':'病符：健康小恙，防微杜渐',
+  '大耗':'大耗：破耗较大，防大额损失',
+  '伏兵':'伏兵：暗藏是非，防暗中阻挠',
+  '官府':'官府：官非文书，循规蹈矩可免'
+};
+/* 岁前十二神断语 */
+var RD_SUI12={
+  '岁建':'岁建：太岁当头，此年变动多，宜守',
+  '晦气':'晦气：晦滞不舒，防口舌是非',
+  '丧门':'丧门：防孝服悲伤之事',
+  '贯索':'贯索：束缚缠身，防官非牢狱',
+  '官符':'官符：官非文书，循规守矩',
+  '小耗':'小耗：破耗小损',
+  '大耗':'大耗：破耗较大',
+  '龙德':'龙德：吉星高照，逢凶化吉',
+  '白虎':'白虎：血光之灾，防意外伤损',
+  '天德':'天德：福德庇佑，贵人相助',
+  '吊客':'吊客：防吊丧哀伤之事',
+  '病符':'病符：防疾病缠身'
+};
+/* 将前十二神断语 */
+var RD_JIANG12={
+  '将星':'将星：威权得力，利掌权',
+  '攀鞍':'攀鞍：地位提升，名利渐来',
+  '岁驿':'岁驿：变动奔波，动中得利',
+  '息神':'息神：安息平静，宜守成',
+  '华盖':'华盖：孤高才华，宜静修',
+  '劫煞':'劫煞：防劫夺破耗',
+  '灾煞':'灾煞：防灾祸横生',
+  '天煞':'天煞：防意外伤损',
+  '指背':'指背：防背后是非',
+  '咸池':'咸池：桃花风流，防情缘纠葛',
+  '月煞':'月煞：防月内是非',
+  '亡神':'亡神：精神耗散，防口舌'
+};
+/* 流曜断语（流盘重点：流年/大限/小限/流月/流日/流时） */
+var RD_FLOW={
+  '天魁':'天乙贵人临流，此阶段多得男贵人相助',
+  '天钺':'天乙贵人临流，此阶段多得女贵人相助',
+  '文昌':'流昌入此，利文书考试声名',
+  '文曲':'流曲入此，利才艺口才表达',
+  '禄存':'流禄入此，财帛丰足，守财有道',
+  '擎羊':'流羊入此，防是非刑伤破耗',
+  '陀罗':'流陀入此，防拖延纠缠反复',
+  '天马':'流马入此，主动中得财，利出行变动',
+  '红鸾':'流鸾入此，主婚喜情缘之兆',
+  '天喜':'流喜入此，主喜庆吉事临门',
+  '年解':'年解入此，主解除困扰，化险为夷'
+};
+/* 原局三方四正吉煞论断（见昌曲/魁钺/左右/空劫/火铃等） */
+var RD_SF_EXTRA={
+  '文昌':'三方四正见文昌：主文书才艺、声名，利考试功名',
+  '文曲':'三方四正见文曲：主才艺口才，利文艺名声',
+  '天魁':'三方四正见天魁：主得贵人相助，逢凶化吉',
+  '天钺':'三方四正见天钺：主得贵人相助，多逢凶化吉',
+  '左辅':'三方四正见左辅：主得同辈助力，朋友相扶',
+  '右弼':'三方四正见右弼：主得暗中相助，左右逢源',
+  '地空':'三方四正见地空：主理想落空，须防虚耗',
+  '地劫':'三方四正见地劫：主波折破耗，须防损失',
+  '火星':'三方四正见火星：主突发爆发，须防骤起骤落',
+  '铃星':'三方四正见铃星：主突来暗耗，须防暗中生变',
+  '禄存':'三方四正见禄存：主财帛丰足，财运顺遂',
+  '天马':'三方四正见天马：主动中得财，利外出发展'
+};
+/* 主星宫位化断语：RD_SP[星名][宫名]（14主星×12宫） */
+var RD_SP={
+  '紫微':{命宫:'帝王坐命，气质尊贵，领导格局，主贵不主富',兄弟:'兄弟有能，可得其助，手足缘厚',夫妻:'配偶强势出众，宜相敬如宾',子女:'子女有成，晚年有靠',财帛:'财源广进，聚财有方，宜守成',疾厄:'防高血压、心脑血管之疾，脾胃欠佳',迁移:'出外受人敬重，贵人扶持',仆役:'朋友众多，得人拥戴，交友广阔',官禄:'宜领导管理，事业有成，掌权得势',田宅:'家宅安稳，置产置业有成',福德:'志气高远，福泽深厚',父母:'父母有力，得祖上荫庇'},
+  '天机':{命宫:'聪明机敏，心思多变，善谋略策划',兄弟:'兄弟聪明，手足缘薄中带助力',夫妻:'配偶聪慧，感情多变须经营',子女:'子女机灵，宜早教培养',财帛:'财路多变，动中取财，宜投资理财',疾厄:'防神经系统、肝胆之疾，易失眠多虑',迁移:'出外多动，动中得机，利谋职',仆役:'朋友多智谋，得军师之助',官禄:'宜策划、技术、文职，动中求进',田宅:'家宅常变动搬迁，置业宜稳',福德:'思虑过多，宜静心养性',父母:'父母聪慧，操心劳碌'},
+  '太阳':{命宫:'光明磊落，热心助人，性刚直',兄弟:'兄弟开朗，手足相帮',夫妻:'配偶光明，宜男强女刚',子女:'子女活泼有成',财帛:'财来光明，先劳后得',疾厄:'防心脏、血压、眼目之疾',迁移:'出外得名，人缘广结',仆役:'朋友热情，得人拥护',官禄:'宜公职、光明正大之业，声名显达',田宅:'家宅光明，置产渐成',福德:'心地光明，福泽随缘',父母:'父母声望佳，得父辈提携'},
+  '武曲':{命宫:'刚毅果决，理财有方，性刚性烈',兄弟:'兄弟刚强，易争财',夫妻:'配偶刚毅，晚婚为宜，聚少离多',子女:'子女独立有成',财帛:'财星入财，财帛丰隆，一生理财有成',疾厄:'防肺、呼吸系统之疾，须防刀伤',迁移:'出外创业得财，动中取利',仆役:'朋友刚直，利合伙理财',官禄:'宜武职、金融、技术，事业有成',田宅:'家宅财气旺，置业有成',福德:'性刚多劳，福自刚中来',父母:'父母刚直，得父辈之助'},
+  '天同':{命宫:'温和随和，福气自来，性偏安逸',兄弟:'兄弟和顺，手足情深',夫妻:'配偶温柔，感情和美',子女:'子女乖巧，晚运佳',财帛:'财来安逸，不劳而获者有之',疾厄:'防膀胱、肾、泌尿之疾，体质偏弱',迁移:'出外得福，贵人相助',仆役:'朋友温和，酒肉之交多',官禄:'宜福禄之职，事业平稳少争',田宅:'家宅安逸，祖业可守',福德:'福泽深厚，精神安逸',父母:'父母慈祥，家庭和乐'},
+  '廉贞':{命宫:'外圆内方，原则性强，重是非',兄弟:'兄弟缘分有竞争',夫妻:'感情复杂，防桃花是非',子女:'子女聪明有个性',财帛:'财帛流动，须防横破',疾厄:'防血液、妇科、小肠之疾，血光之灾',迁移:'出外是非多，宜谨慎',仆役:'朋友重利，防酒肉损友',官禄:'宜公职掌权，是非中求成',田宅:'家宅是非多，防火灾',福德:'心多计较，宜放宽怀',父母:'父母严厉，家教严明'},
+  '天府':{命宫:'稳重宽厚，守成有方，财库坐命',兄弟:'兄弟稳重，手足互助',夫妻:'配偶宽厚，家庭安稳',子女:'子女敦厚有成',财帛:'财库得守，财帛丰足',疾厄:'防脾胃、消化之疾，饮食宜节',迁移:'出外安稳，得人信任',仆役:'朋友厚道，得人襄助',官禄:'宜管理守成之业，事业平稳',田宅:'家宅殷实，置业有成',福德:'福泽绵长，心宽体胖',父母:'父母宽厚，家道殷实'},
+  '太阴':{命宫:'温文内敛，精于理财，女命尤佳',兄弟:'兄弟温和，手足情深',夫妻:'配偶温柔，感情细腻',子女:'子女温和孝顺',财帛:'财帛丰润，善积善守，女命财旺',疾厄:'防肾、泌尿、内分泌之疾，男命防肾虚',迁移:'出外得贵人，宜静不宜动',仆役:'朋友温和，得闺中密友',官禄:'宜内务、财务、文职，事业稳成',田宅:'家宅丰润，置业有成',福德:'内心富足，福泽绵长',父母:'母亲贤淑，得母缘之助'},
+  '贪狼':{命宫:'才艺广博，欲望强烈，善交际应酬',兄弟:'兄弟多才，手足有竞争',夫妻:'桃花入命，感情丰富，防情欲',子女:'子女活泼好动',财帛:'财帛流动，横发横破，宜守不宜赌',疾厄:'防肝、生殖系统之疾，情欲过度伤身',迁移:'出外桃花旺，人缘广结',仆役:'朋友众多，酒色之交多',官禄:'宜娱乐、交际、才艺之业',田宅:'家宅多变动，防桃花是非',福德:'欲望重，宜修身养性',父母:'父母风流，家教宽松'},
+  '巨门':{命宫:'口才伶俐，善辩是非，性多思虑',兄弟:'兄弟多口舌，防争产',夫妻:'感情多口舌，宜晚婚互谅',子女:'子女能言善辩',财帛:'财帛由口而兴，口舌中取财',疾厄:'防口、消化、脾胃之疾，须防是非致郁',迁移:'出外多口舌，宜谨言慎行',仆役:'朋友多口舌，防背后是非',官禄:'宜口才、教育、法律之业',田宅:'家宅多口舌，宜静居',福德:'思虑过深，防口舌之忧',父母:'父母多言，家教严厉'},
+  '天相':{命宫:'端正有礼，辅佐之才，善协调',兄弟:'兄弟端正，手足相扶',夫妻:'配偶端正好伴侣',子女:'子女循规蹈矩',财帛:'财帛平稳，辅佐得财',疾厄:'防皮肤、脾、糖尿病之疾',迁移:'出外得人尊重，贵人相扶',仆役:'朋友端正，得人襄助',官禄:'宜辅佐管理、文书之业',田宅:'家宅安稳，守成有余',福德:'心地端正，福泽平和',父母:'父母端正，家教良好'},
+  '天梁':{命宫:'清高正直，有荫庇之心，逢凶化吉',兄弟:'兄弟有荫，手足相助',夫妻:'配偶贤德，年龄宜长',子女:'子女正直有出息',财帛:'财帛平稳，清高守财',疾厄:'防胃、血、肝之疾，多能化险为夷',迁移:'出外得庇荫，贵人化厄',仆役:'朋友正直，得长者之助',官禄:'宜公职、教育、司法之业',田宅:'家宅平安，有祖荫',福德:'心地清明，福寿双全',父母:'父母慈爱，得长辈庇荫'},
+  '七杀':{命宫:'果敢杀伐，冲劲十足，宜武宜开创',兄弟:'兄弟刚烈，手足缘薄',夫妻:'配偶刚强，感情起伏大',子女:'子女果敢独立',财帛:'财帛起伏大，开创中得财',疾厄:'防意外伤灾、骨骼、刀伤之疾',迁移:'出外闯荡，开创有威',仆役:'朋友敢为，利开创业',官禄:'宜武职、开拓、竞争之业',田宅:'家宅多变动，宜常搬迁',福德:'性情刚烈，劳心费力',父母:'父母刚强，管教严厉'},
+  '破军':{命宫:'破旧立新，敢作敢当，变动开创',兄弟:'兄弟缘分薄，多变动',夫妻:'配偶多变，感情先破后立',子女:'子女独立好动',财帛:'财帛破耗后得，先散后聚',疾厄:'防消耗性、肠、手术之疾',迁移:'出外破旧立新，动中求成',仆役:'朋友多变，防破耗损友',官禄:'宜开创革新、工程之业',田宅:'家宅常修常改，先破后成',福德:'心神不宁，宜安定',父母:'父母劳碌，家庭多变动'}};
+/* 四化宫位化断语：RD_MUP[禄/权/科/忌][宫名] */
+var RD_MUP={
+  禄:{命宫:'命带财禄，一生顺遂多助',兄弟:'手足得利，兄弟助财',夫妻:'配偶旺财，婚姻带财',子女:'子女带财，教养有成',财帛:'正财丰隆，财源顺遂',疾厄:'体质得养，病愈得快',迁移:'出外得财，动中取利',仆役:'朋友助力得财',官禄:'事业顺遂，名利双收',田宅:'家宅兴旺，置业有成',福德:'精神富足，福禄绵长',父母:'父母带财，得荫庇'},
+  权:{命宫:'掌权主动，魄力过人',兄弟:'兄弟掌权，手足主事',夫妻:'配偶掌权，宜互让',子女:'子女自主有成',财帛:'财权在握，理财有道',疾厄:'意志力强，康复有力，防操劳',迁移:'出外掌权，有声望',仆役:'朋友有权威，得实权之助',官禄:'事业掌权，升迁有望',田宅:'家宅自主，置业掌权',福德:'志气高昂，自我要求高',父母:'父母掌权，家教严格'},
+  科:{命宫:'声名显达，贵人提携',兄弟:'手足有名，相互提携',夫妻:'配偶名声好，婚姻体面',子女:'子女聪慧有功名',财帛:'财帛顺遂，名利并得',疾厄:'得良医良药，病可化解',迁移:'出外有名，贵人相助',仆役:'朋友正派，得文书之助',官禄:'事业有声名，考试升迁利',田宅:'家宅光鲜，门第增辉',福德:'心境平和，福泽清雅',父母:'父母有名望，光耀门楣'},
+  忌:{命宫:'一生操劳，多思多忧，宜修心',兄弟:'手足缘薄，防争产失和',夫妻:'感情多磨，防配偶健康或分离',子女:'子女操心，教养费心',财帛:'财帛破耗，防失财借贷',疾厄:'体质偏弱，防宿疾缠身，宜早检查',迁移:'出外多阻，防意外是非',仆役:'防损友拖累，交友宜慎',官禄:'事业阻碍，防是非失职',田宅:'家宅耗损，防搬迁破财',福德:'心神不宁，烦忧多思',父母:'父母操劳，防长辈健康'}
+};
+/* 八吉六煞宫位化断语：RD_MNP[星名][宫名]（14星×12宫） */
+var RD_MNP={
+  左辅:{命宫:'得同辈助力，一生多扶助',兄弟:'兄弟助益，手足相扶',夫妻:'配偶助力，婚姻得助',子女:'子女有帮手，教养顺遂',财帛:'财得助力，合伙得财',疾厄:'得良医照护，病中有人扶',迁移:'出外得助，贵人相随',仆役:'朋友实助，得肝胆相照',官禄:'事业得助，同事相扶',田宅:'家宅得助，置业有帮',福德:'心境安稳，得人排解',父母:'父母有助，得长辈提携'},
+  右弼:{命宫:'得暗中相助，逢凶化吉',兄弟:'手足暗助，得弟妹之力',夫妻:'配偶暗中支持',子女:'子女暗中孝顺',财帛:'财有暗助，得意外之财',疾厄:'病中得暗助，有贵人医缘',迁移:'出外得暗贵，化险为夷',仆役:'朋友暗中周旋',官禄:'事业得暗助，贵人提拔',田宅:'家宅暗旺，置业顺遂',福德:'心境平和，暗中有福',父母:'父母暗助，荫护无形'},
+  文昌:{命宫:'聪明文墨，才华出众，利考试',兄弟:'手足文雅，学问相长',夫妻:'配偶文雅，书信传情',子女:'子女读书有成',财帛:'文墨得财，利文书契约',疾厄:'防呼吸、气管之疾，宜养气',迁移:'出外文名，利外出求学',仆役:'朋友斯文，多文友',官禄:'宜文职、教育、出版之业',田宅:'家宅书香，文风传家',福德:'精神雅致，书卷气浓',父母:'父母文雅，门风清正'},
+  文曲:{命宫:'才艺出众，口才伶俐，多才多艺',兄弟:'手足才艺，相得益彰',夫妻:'配偶才情，感情浪漫',子女:'子女才艺有成',财帛:'才艺生财，利演艺口才',疾厄:'防口舌、咽喉、神经之疾',迁移:'出外才名，人缘甚佳',仆役:'朋友多才，声色之友',官禄:'宜文艺、演艺、传播之业',田宅:'家宅风流，防桃花',福德:'精神浪漫，情感丰富',父母:'父母多才，家学渊源'},
+  天魁:{命宫:'天乙贵人坐命，逢凶化吉',兄弟:'手足得贵，兄弟有功名',夫妻:'配偶有贵气，婚姻体面',子女:'子女有贵人，前程似锦',财帛:'财得贵人助，逢凶化吉',疾厄:'病中得男贵医助，逢凶化吉',迁移:'出外得男贵人，化险为夷',仆役:'朋友中有贵人',官禄:'事业逢凶化吉，贵人提携',田宅:'家宅得贵，门第生辉',福德:'心境光明，贵气临身',父母:'父母有贵，光耀门庭'},
+  天钺:{命宫:'天乙贵人，多逢凶化吉，得女贵',兄弟:'手足得女贵之助',夫妻:'配偶贤淑有助',子女:'子女得人疼惜',财帛:'财得女贵相助',疾厄:'病中得女贵医助，化解病厄',迁移:'出外得女贵人，逢凶化吉',仆役:'朋友中得女贵相助',官禄:'事业得女贵提携',田宅:'家宅安稳，内助得力',福德:'心境柔和，福泽暗临',父母:'父母慈爱，得母系之助'},
+  禄存:{命宫:'禄存坐命，一生财丰，守财有道',兄弟:'兄弟有余，手足共享',夫妻:'配偶旺家，婚姻殷实',子女:'子女衣食无忧',财帛:'财帛丰足，正财稳当',疾厄:'体质康健，病少临身',迁移:'出外财丰，动中守财',仆役:'朋友殷实，益友相聚',官禄:'事业财旺，稳中有升',田宅:'家宅殷实，置业丰盈',福德:'福禄双全，心宽体泰',父母:'父母殷实，得祖荫'},
+  天马:{命宫:'天马坐命，奔波劳碌，动中得利',兄弟:'手足奔波，聚少离多',夫妻:'配偶常外出，聚少离多',子女:'子女好动，宜出外发展',财帛:'动中得财，利运输贸易',疾厄:'防劳损、筋骨之疾，宜多休息',迁移:'出外得财，越动越发',仆役:'朋友多奔波，人脉广',官禄:'宜外务、业务、运输之业',田宅:'家宅常搬迁，居无定所',福德:'心神浮动，宜静养',父母:'父母奔波，劳碌命'},
+  擎羊:{命宫:'擎羊坐命，性烈果决，防刑伤',兄弟:'手足缘薄，防争产',夫妻:'婚姻多磨，防刑克',子女:'子女刚烈，教养须严',财帛:'财有横破，防意外破财',疾厄:'防意外刀伤、开刀、血光之灾',迁移:'出外防意外是非，宜谨慎',仆役:'朋友多是非，防争斗',官禄:'事业多竞争，防刑伤官非',田宅:'家宅防损伤，防刀火之灾',福德:'性烈心躁，宜克制',父母:'父母严厉，防刑克'},
+  陀罗:{命宫:'陀罗坐命，做事拖延，心多纠缠',兄弟:'手足纠缠，防拖累',夫妻:'感情拖延，宜果断',子女:'子女迟发，晚成',财帛:'财帛迟滞，防拖延破财',疾厄:'防慢性病、旧疾缠绵难愈',迁移:'出外拖延受阻，宜早动',仆役:'朋友拖累，防纠缠',官禄:'事业迟滞，宜守成',田宅:'家宅拖延，置业缓成',福德:'心事重重，宜放下',父母:'父母操劳，旧事缠身'},
+  火星:{命宫:'火星坐命，性急如火，爆发力强',兄弟:'手足性急，多争执',夫妻:'婚姻火爆，防突发争吵',子女:'子女急躁，教养成才',财帛:'财有爆发，横发横破',疾厄:'防发烧、炎症、急症突发',迁移:'出外突发之事多，宜谨慎',仆役:'朋友性急，多口角',官禄:'事业爆发，先急后成',田宅:'家宅防火灾、突发耗损',福德:'心浮气躁，宜静心',父母:'父母性急，防突发之灾'},
+  铃星:{命宫:'铃星坐命，暗藏火性，多突来之变',兄弟:'手足暗中争执',夫妻:'感情暗涌，防突生变故',子女:'子女心性急',财帛:'财有暗耗，防突来破财',疾厄:'防暗疾、炎症反复、内热之疾',迁移:'出外暗藏是非，防突生变',仆役:'朋友暗斗，防小人',官禄:'事业暗礁，防突发是非',田宅:'家宅暗耗，防电路火险',福德:'内心暗焦，宜疏解',父母:'父母暗劳，防突发之疾'},
+  地空:{命宫:'地空坐命，多理想，钱财易空',兄弟:'手足多空忙，难实助',夫妻:'感情多空想，防落空',子女:'子女多幻想',财帛:'财帛虚耗，防破财落空',疾厄:'防气虚、亏空之疾，宜养元',迁移:'出外多空忙，宜务实',仆役:'朋友虚浮，难靠实',官禄:'事业多变动空想，宜务实',田宅:'家宅空乏，置业宜慎',福德:'心性空灵，宜修行',父母:'父母劳空，操心无果'},
+  地劫:{命宫:'地劫坐命，一生多波折，财来财去',兄弟:'手足波折，难相济',夫妻:'婚姻波折，防变故',子女:'子女多波折',财帛:'财帛劫耗，防损失被盗',疾厄:'防元气耗损、体质虚弱之疾',迁移:'出外波折，防损失',仆役:'朋友劫耗，防损友',官禄:'事业波折，防被劫功',田宅:'家宅耗损，防失物',福德:'心绪波折，宜安定',父母:'父母波折，家运起伏'}
+};
+/* 空宫借星：本宫无主星时借对宫主星安星论断；空宫不独论本宫小星曜 */
+function rdBorrowLines(chart,idx,pn,muCls){
+  var out=[];
+  if(chart.major[idx].length>0){
+    rdStarLines(chart,idx,pn,muCls).forEach(function(x){out.push(x);});
+    return out;
+  }
+  var oi=fixIndex(idx+6);
+  var opn=PALACES[fixIndex(oi-chart.soulIdx)];
+  if(chart.major[oi].length===0){
+    out.push('<div class="rd-line rd-kj">本宫为空宫：无主星坐守，对宫'+esc(opn)+'亦空，此宫星曜力量薄弱，论断宜保守，重点参看三方四正与流曜</div>');
+    return out;
+  }
+  var names=chart.major[oi].map(function(s){return s.name;}).join('、');
+  out.push('<div class="rd-line rd-kj">本宫为空宫：无主星坐守，借对宫'+esc(opn)+'（'+esc(names)+'）主星安星论断，吉凶以借入主星为凭</div>');
+  chart.major[oi].forEach(function(s){
+    var t=RD_SP[s.name]&&RD_SP[s.name][pn];
+    var b=s.bright?(s.bright+'：'+(RD_BRIGHT[s.bright]||'')):'';
+    out.push('<div class="rd-line"><span class="rd-k">'+esc(s.name)+'</span>入'+esc(pn)+'（借对宫）：'+(t?esc(t):(RD_STAR_NATURE[s.name]||''))+(b?'（'+esc(b)+'）':'')+'</div>');
+  });
+  if(chart.major[oi].length>=2){
+    var key=chart.major[oi].map(function(s){return s.name;}).join('');
+    if(RD_COMBO[key])out.push('<div class="rd-line rd-kj">借星得'+esc(RD_COMBO[key])+'</div>');
+  }
+  chart.major[oi].forEach(function(s){
+    if(s.mu){
+      var mt=RD_MUP[s.mu]&&RD_MUP[s.mu][pn];
+      out.push('<div class="rd-line '+muCls[s.mu]+'"><span class="rd-k">'+esc(s.name)+'化'+esc(s.mu)+'</span>入'+esc(pn)+'（借对宫）：'+esc(RD_MU[s.mu])+(mt?'；'+esc(mt):'')+'</div>');
+    }
+  });
+  return out;
+}
+function rdStarLines(chart,idx,pn,muCls){
+  var out=[];
+  chart.major[idx].forEach(function(s){
+    var t=RD_SP[s.name]&&RD_SP[s.name][pn];
+    var b=s.bright?(s.bright+'：'+(RD_BRIGHT[s.bright]||'')):'';
+    out.push('<div class="rd-line"><span class="rd-k">'+esc(s.name)+'</span>入'+esc(pn)+'：'+(t?esc(t):(RD_STAR_NATURE[s.name]||''))+(b?'（'+esc(b)+'）':'')+'</div>');
+  });
+  if(chart.major[idx].length>=2){
+    var key=chart.major[idx].map(function(s){return s.name;}).join('');
+    if(RD_COMBO[key])out.push('<div class="rd-line rd-kj">'+esc(RD_COMBO[key])+'</div>');
+  }
+  chart.major[idx].forEach(function(s){
+    if(s.mu){
+      var mt=RD_MUP[s.mu]&&RD_MUP[s.mu][pn];
+      out.push('<div class="rd-line '+muCls[s.mu]+'"><span class="rd-k">'+esc(s.name)+'化'+esc(s.mu)+'</span>入'+esc(pn)+'：'+esc(RD_MU[s.mu])+(mt?'；'+esc(mt):'')+'</div>');
+    }
+  });
+  return out;
+}
+/* 主星双星组合断语 */
+var RD_COMBO={
+  '紫微天府':'紫府同宫：财官双美之格，大器晚成，稳重有成',
+  '紫微贪狼':'紫贪同宫：桃花坐命，才艺出众，须防物欲情欲',
+  '紫微破军':'紫破同宫：开创格局，先破后立，威权并重',
+  '紫微七杀':'紫杀同宫：帝星会杀，威权显赫，须防过于刚烈',
+  '天机太阴':'机阴同宫：善理家财，心思细腻，利幕后策划',
+  '天机巨门':'机巨同宫：口才机变，多思多虑，宜静不宜动',
+  '天机天梁':'机梁同宫：善谈兵机，见多识广，利研究咨询',
+  '太阳太阴':'日月同宫：阴阳调和，贵气与财气兼具',
+  '太阳巨门':'日巨同宫：光明照暗，能言善道，以口为业',
+  '太阳天梁':'日梁同宫：荫星遇日，逢凶化吉，贵人明现',
+  '武曲天府':'武府同宫：财库得刚，富而有守，稳中求进',
+  '武曲贪狼':'武贪同宫：横发之星，行动取财，须防物欲',
+  '武曲天相':'武相同宫：刚柔并济，掌印得权，利管理',
+  '武曲七杀':'武杀同宫：肃杀之格，果断敢为，利武职开创',
+  '武曲破军':'武破同宫：破旧立新，变动取财，先难后成',
+  '天同太阴':'同阴同宫：福泽绵长，温和安逸，利内务',
+  '天同巨门':'同巨同宫：白手兴家，口福是非并见',
+  '天同天梁':'同梁同宫：福荫并至，晚运佳美',
+  '廉贞天府':'廉府同宫：化气为囚得库，外柔内刚，能守成',
+  '廉贞贪狼':'廉贪同宫：酒色财气，才艺风流，须防沉溺',
+  '廉贞天相':'廉相同宫：囚印同宫，文书得力，掌权有制',
+  '廉贞七杀':'廉杀同宫：刑杀交并，激进果敢，利开创',
+  '廉贞破军':'廉破同宫：破耗交加，变动是非，宜三思'
+};
+/* 口诀断语库 */
+var RD_KJ={
+  '刑囚并至':'廉贞与擎羊同宫或三合会照，主刑伤官非，是非缠身，宜循规蹈矩以避祸',
+  '刑忌夹印':'天相被巨门化忌所夹，主受困受制，文书是非，须防契约官非',
+  '财荫夹印':'天相被巨门化禄或天梁所夹，主得财荫庇护，利名利双收',
+  '火贪格':'火星与贪狼同宫，主暴发暴败，横发之财，须防来得快去得快',
+  '铃贪格':'铃星与贪狼同宫，主突来横发，声色中取财，须防骤起骤落',
+  '火铃夹命':'命宫被火星、铃星相夹，主一生多突发之事，成败起伏大',
+  '羊陀夹命':'命宫被擎羊、陀罗相夹，主受制受迫，须防刑伤与掣肘',
+  '紫府朝垣':'紫微、天府在命宫三方四正会照，主富贵双全，格局宏大',
+  '机月同梁':'天机、太阴、天同、天梁格局，主聪明安稳，利公职文职',
+  '日照雷门':'太阳居卯宫，主少年得志，光明磊落，利名声',
+  '月朗天门':'太阴居亥宫，主清贵富足，晚运尤佳',
+  '杀破狼':'七杀、破军、贪狼三星格局，主变动开创，一生起伏大，宜动态发展',
+  '武贪同行':'武曲、贪狼同宫，主以行动取财，可成横发之局',
+  '廉贪同行':'廉贞、贪狼同宫，主才艺风流，须防桃花是非',
+  '双禄交流':'禄存与化禄同宫或会照，主财帛丰盛，双喜临门',
+  '昌曲夹命':'命宫被文昌、文曲相夹，主聪明才华，利文墨功名',
+  '魁钺夹命':'命宫被天魁、天钺相夹，主贵人扶持，逢凶化吉',
+  '日月夹命':'命宫被太阳、太阴相夹，主贵气临身，福荫深厚',
+  '火铃夹限':'大限或流年命宫被火铃相夹，主该阶段突发波折',
+  '羊陀夹忌':'命宫被羊陀夹且见化忌，主是非缠身，进退维谷'
+};
+/* 三方四正（含本宫，idx 为网格索引） */
+function sfIdxList(idx){
+  var zhi=(idx+2)%12;
+  return [fixIndex(zhi-2),fixIndex((zhi+4)%12-2),fixIndex((zhi+8)%12-2),fixIndex((zhi+6)%12-2)];
+}
+/* 口诀检测：本宫 + 三方四正 + 夹宫 */
+function rdKoujue(chart,idx){
+  var out=[];
+  var sf=sfIdxList(idx);
+  var scope=[idx].concat(sf);
+  var names={},me=chart.major[idx].map(function(s){return s.name;});
+  scope.forEach(function(i){
+    chart.major[i].forEach(function(s){names[s.name]=1;});
+    chart.minor[i].forEach(function(n){names[n.name]=1;});
+  });
+  /* 夹的判断：两星必须分居本宫左右两侧（各一），同在一边不构成夹 */
+  function sideStars(i){
+    var s={};
+    chart.major[i].forEach(function(x){s[x.name]=1;});
+    chart.minor[i].forEach(function(x){s[x.name]=1;});
+    return s;
+  }
+  var Ls=sideStars(fixIndex(idx-1)),Rs=sideStars(fixIndex(idx+1));
+  function clamped(a,b){return (Ls[a]&&Rs[b])||(Ls[b]&&Rs[a]);}
+  if(names['廉贞']&&names['擎羊'])out.push('刑囚并至');
+  if(names['火星']&&names['贪狼'])out.push('火贪格');
+  if(names['铃星']&&names['贪狼'])out.push('铃贪格');
+  if(clamped('火星','铃星'))out.push('火铃夹命');
+  if(clamped('擎羊','陀罗')){
+    var hasJi=false;
+    chart.major[idx].forEach(function(s){if(s.mu==='忌')hasJi=true;});
+    out.push(hasJi?'羊陀夹忌':'羊陀夹命');
+  }
+  if(clamped('文昌','文曲'))out.push('昌曲夹命');
+  if(clamped('天魁','天钺'))out.push('魁钺夹命');
+  if(clamped('太阳','太阴'))out.push('日月夹命');
+  if(me.indexOf('天相')>=0){
+    var Lm={},Rm={};
+    chart.major[fixIndex(idx-1)].forEach(function(s){if(s.mu)Lm[s.name]=s.mu;});
+    chart.major[fixIndex(idx+1)].forEach(function(s){if(s.mu)Rm[s.name]=s.mu;});
+    if((Lm['巨门']==='忌'&&(Rs['擎羊']||Rs['陀罗']))||(Rm['巨门']==='忌'&&(Ls['擎羊']||Ls['陀罗'])))out.push('刑忌夹印');
+    else if((Lm['巨门']==='禄'&&Rs['天梁'])||(Rm['巨门']==='禄'&&Ls['天梁']))out.push('财荫夹印');
+  }
+  /* 命宫专属格局口诀：仅在本命宫论断（避免在疾厄/财帛等宫误断） */
+  if(idx===chart.soulIdx){
+    if(me.indexOf('紫微')>=0&&me.indexOf('天府')>=0)out.push('紫府朝垣');
+    if(names['天机']&&names['太阴']&&names['天同']&&names['天梁'])out.push('机月同梁');
+    if(names['七杀']&&names['破军']&&names['贪狼'])out.push('杀破狼');
+    if(me.indexOf('太阳')>=0&&idx===1)out.push('日照雷门');  // 太阳在卯
+    if(me.indexOf('太阴')>=0&&idx===9)out.push('月朗天门');  // 太阴在亥
+  }
+  var hasLu=false;
+  scope.forEach(function(i){chart.major[i].forEach(function(s){if(s.mu==='禄')hasLu=true;});});
+  if(names['禄存']&&hasLu)out.push('双禄交流');
+  return out;
+}
+/* 当前盘面层级断语（大限/流年/小限/流月/流日/流时）
+   原则：流盘以当前盘面为论——十二宫皆断事：宫位主题 + 主星（亮度/四化/组合）
+   + 该层四化 + 流曜 + 十二神（长生/博士/岁前/将前）+ 杂曜对星；
+   不引用原局宫位归属，不作原局夹宫格局口诀 */
+function rdLayerData(chart,flow,layer,idx,pn,gods){
+  var out=[];
+  var muCls={禄:'mu-lu',权:'mu-quan',科:'mu-ke',忌:'mu-ji'};
+  if(!flow[layer])return out;
+  var f=flow[layer];
+  var lmu=f.mutagen||{},lidx=f.index,lstars=f.stars;
+  var LAY=LAYER_NAMES[layer]||layer;
+  var g=gods||{};
+  // 1. 宫位主题（十二宫皆断事）
+  out.push('<div class="rd-line"><span class="rd-k">'+esc(pn)+'</span>：'+esc(RD_PALACE[pn]||'')+'</div>');
+  // 2. 主星 + 亮度 + 双星组合 + 本命四化（空宫借对宫主星）
+  rdBorrowLines(chart,idx,pn,muCls).forEach(function(x){out.push(x);});
+  // 3. 该层命宫位置（只用地支干支表述，不引用原局宫位）
+  if(lidx===idx)out.push('<div class="rd-line">本宫即'+LAY+'命宫（'+esc(f.gan)+esc(zhiOfIdx(lidx))+'），此阶段以本宫为人事主轴</div>');
+  else out.push('<div class="rd-line">'+LAY+'命宫在'+esc(f.gan)+esc(zhiOfIdx(lidx))+'，与本宫的关系以流曜落宫相参</div>');
+  // 4. 该层四化落本宫/三方四正
+  var sf=sfIdxList(idx);
+  Object.keys(lmu).forEach(function(sn){
+    var mv=lmu[sn];
+    var at=-1;
+    for(var i=0;i<12;i++){
+      chart.major[i].forEach(function(s){if(s.name===sn)at=i;});
+    }
+    if(at>=0&&(at===idx||sf.indexOf(at)>=0)){
+      var mt=RD_MUP[mv]&&RD_MUP[mv][pn];
+      out.push('<div class="rd-line '+muCls[mv]+'">'+LAY+esc(sn)+'化'+esc(mv)+(at===idx?'入本宫':'入三方四正')+'：'+esc(RD_MU[mv])+(mt?'；'+esc(mt):'')+'</div>');
+    }
+  });
+  // 5. 流曜入本宫（含该层四化推断，重点）
+  if(lstars){
+    lstars.filter(function(x){return x.idx===idx;}).forEach(function(x){
+      var t=RD_FLOW[x.name];
+      var mu=lmu[x.name];
+      if(t){
+        out.push('<div class="rd-line">'+LAY+'<span class="rd-k">'+esc(x.name)+'</span>'+
+          (mu?'<span class="rd-k '+muCls[mu]+'">化'+esc(mu)+'</span>：'+esc(RD_MU[mu])+'；':'：')+esc(t)+'</div>');
+      }else if(mu){
+        out.push('<div class="rd-line '+muCls[mu]+'">'+LAY+'<span class="rd-k">'+esc(x.name)+'化'+esc(mu)+'</span>：'+esc(RD_MU[mu])+'</div>');
+      }
+    });
+  }
+  // 6. 十二神（本宫四系：长生/博士/岁前/将前）——重点
+  var cs=chart.cs12[idx],bs=g.bs?g.bs[idx]:'',
+      sq=g.sq?g.sq[idx]:'',jq=g.jq?g.jq[idx]:'';
+  if(RD_CS12_ALL[cs])out.push('<div class="rd-line rd-kj">'+esc(cs)+'（长生）：'+esc(RD_CS12_ALL[cs])+'</div>');
+  if(RD_BS12[bs])out.push('<div class="rd-line">'+esc(bs)+'（博士）：'+esc(RD_BS12[bs])+'</div>');
+  if(RD_SUI12[sq])out.push('<div class="rd-line">'+esc(sq)+'（岁前）：'+esc(RD_SUI12[sq])+'</div>');
+  if(RD_JIANG12[jq])out.push('<div class="rd-line">'+esc(jq)+'（将前）：'+esc(RD_JIANG12[jq])+'</div>');
+  // 7. 杂曜：本宫+三方四正范围内成对（空宫不独论小星曜，跳过）
+  var scope=[idx].concat(sf),seen={};
+  scope.forEach(function(i){chart.adj[i].forEach(function(a){seen[a]=1;});});
+  if(chart.major[idx].length>0){
+  Object.keys(RD_PAIRS).forEach(function(a){
+    var b=RD_PAIRS[a];
+    if(seen[a]&&seen[b]){
+      var t=RD_PAIR_TXT[a+b]||RD_PAIR_TXT[b+a];
+      if(t)out.push('<div class="rd-line">'+esc(t)+'</div>');
+    }
+  });
+  }
+  return out;
+}
+/* 主断语生成器：原局深度断语；流盘（大限/流年/小限/流月/流日/流时）只论当前盘面 */
+function buildReading(chart,flow,layer,idx){
+  var natal=[],lyr=[];
+  var pn=PALACES[fixIndex(idx-chart.soulIdx)];
+  if(layer!=='origin'){
+    var pnF=PALACES[fixIndex(idx-((flow[layer]&&flow[layer].index!=null)?flow[layer].index:chart.soulIdx))];
+    lyr=rdLayerData(chart,flow,layer,idx,pnF,RD_CTX&&RD_CTX.gods);
+    return {pn:pnF,natal:natal,lyr:lyr,layer:layer};
+  }
+  var muCls={禄:'mu-lu',权:'mu-quan',科:'mu-ke',忌:'mu-ji'};
+  natal.push('<div class="rd-line"><span class="rd-k">'+esc(pn)+'</span>：'+esc(RD_PALACE[pn]||'')+'</div>');
+  rdBorrowLines(chart,idx,pn,muCls).forEach(function(x){natal.push(x);});
+  if(chart.major[idx].length>0){
+  chart.minor[idx].forEach(function(n){
+    var mp=RD_MNP[n.name]&&RD_MNP[n.name][pn];
+    if(mp)natal.push('<div class="rd-line '+(MALEFIC.indexOf(n.name)>=0?'rd-bad':'rd-good')+'"><span class="rd-k">'+esc(n.name)+'</span>入'+esc(pn)+'：'+esc(mp)+(n.bright?'（'+esc(n.bright)+'）':'')+'</div>');
+    else if(AUSPICIOUS.indexOf(n.name)>=0&&RD_AUSP[n.name])natal.push('<div class="rd-line rd-good">'+esc(RD_AUSP[n.name])+'</div>');
+    else if(MALEFIC.indexOf(n.name)>=0&&RD_MALF[n.name])natal.push('<div class="rd-line rd-bad">'+esc(RD_MALF[n.name])+'</div>');
+    if(n.mu){
+      var mt=RD_MUP[n.mu]&&RD_MUP[n.mu][pn];
+      natal.push('<div class="rd-line '+muCls[n.mu]+'"><span class="rd-k">'+esc(n.name)+'化'+esc(n.mu)+'</span>入'+esc(pn)+'：'+esc(RD_MU[n.mu])+(mt?'；'+esc(mt):'')+'</div>');
+    }
+  });
+  }
+  var sf=sfIdxList(idx);
+  var scope=[idx].concat(sf);
+  var sfSeen={}; // 三方四正吉煞去重
+  var seen={};
+  scope.forEach(function(i){chart.adj[i].forEach(function(a){seen[a]=1;});});
+  if(chart.major[idx].length>0){
+  Object.keys(RD_PAIRS).forEach(function(a){
+    var b=RD_PAIRS[a];
+    if(seen[a]&&seen[b]){
+      var t=(pn==='疾厄'&&RD_PAIR_HEALTH[a+b])?RD_PAIR_HEALTH[a+b]:(RD_PAIR_TXT[a+b]||RD_PAIR_TXT[b+a]);
+      if(t)natal.push('<div class="rd-line">'+esc(t)+'</div>');
+    }
+  });
+  }
+  var cs=chart.cs12[idx];
+  if(RD_CS_SPECIAL[cs])natal.push('<div class="rd-line rd-kj">'+esc(cs)+'：'+esc(RD_CS_SPECIAL[cs])+'</div>');
+  rdKoujue(chart,idx).forEach(function(k){
+    if(RD_KJ[k])natal.push('<div class="rd-line rd-kj">【'+esc(k)+'】'+esc(RD_KJ[k])+'</div>');
+  });
+  sf.forEach(function(i){
+    if(i===idx)return;
+    chart.major[i].forEach(function(s){
+      if(s.mu){
+        var p2=PALACES[fixIndex(i-chart.soulIdx)];
+        natal.push('<div class="rd-line '+muCls[s.mu]+'"><span class="rd-k">'+esc(p2)+'</span>见'+esc(s.name)+esc(s.mu)+'：'+esc(RD_MU[s.mu])+'，会照'+esc(pn)+'，形成联动影响</div>');
+      }
+    });
+    chart.minor[i].forEach(function(n){
+      if(RD_SF_EXTRA[n.name]&&!sfSeen[n.name]){
+        sfSeen[n.name]=1;
+        natal.push('<div class="rd-line rd-good">'+esc(RD_SF_EXTRA[n.name])+'</div>');
+      }
+    });
+  });
+  return {pn:pn,natal:natal,lyr:lyr,layer:layer};
+}
+function renderReading(chart,flow,layer,idx){
+  var el=document.getElementById('reading');
+  if(!el)return;
+  var r=buildReading(chart,flow,layer,idx);
+  var html='<div class="rd-box"><div class="rd-title">'+esc(r.pn)+'断语</div>';
+  if(r.natal.length){
+    html+='<div class="rd-sec"><div class="rd-sec-t natal">▍本命（原局）</div>'+r.natal.join('')+'</div>';
+  }
+  if(r.lyr.length){
+    html+='<div class="rd-sec"><div class="rd-sec-t '+r.layer+'">▍'+esc(LAYER_NAMES[r.layer]||r.layer)+'</div>'+r.lyr.join('')+'</div>';
+  }
+  html+='</div>';
+  el.innerHTML=html;
+  el.classList.add('show');
+}
+function clearReading(){
+  var el=document.getElementById('reading');
+  if(el){el.innerHTML='';el.classList.remove('show');}
+}
+var RD_CTX=null; // 当前盘上下文（render 时写入，供点击断语使用）
+
+
 /* 未排盘时的空盘 */
 function renderEmpty(grid){
   grid.innerHTML='';
@@ -1322,12 +1882,14 @@ function renderEmpty(grid){
 
 function render(){
   var grid=document.getElementById('chart');
+  clearReading(); // 盘面重建后清空旧断语
   try{
-    if(!IS_PANNED){renderEmpty(grid);return;}
+    if(!IS_PANNED){renderEmpty(grid);RD_CTX=null;return;}
     var state=readState();
     var chart=buildChart(state);
     var flow=buildFlow(chart,state.flowLunar,state.flowTimeIndex,state.flowEffLunar);
     var layer=state.layer;
+    RD_CTX={chart:chart,flow:flow,layer:layer}; // 供点击宫位时生成断语
     grid.innerHTML='';
 
   // 层配置
@@ -1354,6 +1916,7 @@ function render(){
     sq12v=suiqian12(flow.yearly.zhi);
     jq12v=jiangqian12(flow.yearly.zhi);
   }
+  RD_CTX.gods={bs:bs12v,sq:sq12v,jq:jq12v}; // 供流盘断语读取十二神
 
   for(var idx=0;idx<12;idx++){
     var pos=GRID_POS[idx];
@@ -1830,7 +2393,7 @@ function init(){
       c.classList.remove('hl-dim');
       if(c.dataset.orig){c.className=c.dataset.orig;c.classList.remove('hl','hl-sf');delete c.dataset.orig;}
     });
-    if(was)return; // 本次取消高亮，底色已恢复
+    if(was){clearReading();return;} // 本次取消高亮，底色已恢复
     var sf=sanFangSiZheng(idx);
     cell.classList.add('hl');
     var cells=grid.querySelectorAll('.cell');
@@ -1845,6 +2408,8 @@ function init(){
       c.classList.remove('cur','sf','ming');
       c.classList.add('hl-dim');
     });
+    // 断语：当前盘上下文可用时显示该宫位断语
+    if(RD_CTX)renderReading(RD_CTX.chart,RD_CTX.flow,RD_CTX.layer,idx);
   });
   ['by','bm','bd','bt','fy','fm','fd','ft'].forEach(function(id){
     var el=document.getElementById(id);
