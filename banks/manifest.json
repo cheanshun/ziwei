@@ -12,7 +12,7 @@
       "id": "紫微斗数题库",
       "title": "紫微斗数断语题库",
       "file": "紫微斗数题库.json",
-      "enabled": false,
+      "enabled": true,
       "desc": "166 题"
     }
   ]
