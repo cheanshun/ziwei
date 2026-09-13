@@ -458,6 +458,7 @@ const K_APP_LOCK = "quiz.applock.v1";
 const K_LEVEL = "quiz.level.v1";
 const K_SEL_BANKS = "quiz.selbanks.v1";
 const K_OLD_BANK = "quiz.bank.v1";
+const K_GH_TOKEN = "quiz.ghtoken.v1";
 
 /* ===== 闯关配置：七级难度递增 ===== */
 const LEVELS = [
@@ -595,6 +596,182 @@ function renderRemoteBar(){
   if(rf) rf.addEventListener("click", function(){ loadRemoteBanks(); });
   var op = document.getElementById("btn-remote-open");
   if(op) op.addEventListener("click", function(){ window.open(remoteRepoBanksUrl(), "_blank"); });
+}
+
+/* ===== 仓库题库管理（GitHub API，管理员直接上传/停用/启用/删除） ===== */
+var ghManifestState = null;
+function ghRepo(){
+  var u = remoteManifestUrl();
+  var m = u.match(/github\.com\/([^\/]+)\/([^\/]+)\/banks\/manifest\.json/) || u.match(/^https:\/\/([^\/]+)\.github\.io\/([^\/]+)\/banks\/manifest\.json/);
+  if(m) return { owner: m[1], repo: m[2] };
+  var m2 = REMOTE_DEFAULT.match(/github\.com\/([^\/]+)\/([^\/]+)\/banks\/manifest\.json/);
+  if(m2) return { owner: m2[1], repo: m2[2] };
+  return { owner: "cheanshun", repo: "ziwei" };
+}
+function ghApi(path, method, body){
+  var t = LS.get(K_GH_TOKEN, "");
+  if(!t) return Promise.reject(new Error("请先保存 GitHub Token"));
+  return fetch("https://api.github.com" + path, {
+    method: method,
+    headers: { "Authorization": "Bearer " + t, "Accept": "application/vnd.github+json", "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined
+  }).then(function(r){
+    if(!r.ok) return r.text().then(function(txt){ throw new Error("GitHub API " + r.status + " " + txt.substring(0, 140)); });
+    return r.status === 204 ? null : r.json();
+  });
+}
+function b64u(str){
+  return btoa(unescape(encodeURIComponent(str)));
+}
+function fromB64(b64){
+  var bin = atob(b64);
+  try {
+    var bytes = Uint8Array.from(bin, function(c){ return c.charCodeAt(0); });
+    return new TextDecoder("utf-8").decode(bytes);
+  } catch(e){
+    try { return decodeURIComponent(bin.replace(/[^\x20-\x7E]/g, function(c){ return "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2); })); }
+    catch(e2){ return bin; }
+  }
+}
+function ghGetManifest(){
+  var rp = ghRepo();
+  return ghApi("/repos/" + rp.owner + "/" + rp.repo + "/contents/banks/manifest.json").then(function(data){
+    return { json: JSON.parse(fromB64(data.content)), sha: data.sha };
+  });
+}
+function ghWriteManifest(json, sha){
+  var rp = ghRepo();
+  return ghApi("/repos/" + rp.owner + "/" + rp.repo + "/contents/banks/manifest.json", "PUT", {
+    message: "题库清单更新",
+    content: b64u(JSON.stringify(json, null, 2)),
+    sha: sha
+  });
+}
+function ghPutBankFile(fileName, text, sha){
+  var rp = ghRepo();
+  return ghApi("/repos/" + rp.owner + "/" + rp.repo + "/contents/banks/" + fileName, "PUT", {
+    message: "上传题库 " + fileName,
+    content: b64u(text),
+    sha: sha || undefined
+  });
+}
+function ghGetBankFileMeta(fileName){
+  var rp = ghRepo();
+  return ghApi("/repos/" + rp.owner + "/" + rp.repo + "/contents/banks/" + fileName).then(function(d){ return { sha: d.sha }; });
+}
+function ghDeleteBankFile(fileName, sha){
+  var rp = ghRepo();
+  return ghApi("/repos/" + rp.owner + "/" + rp.repo + "/contents/banks/" + fileName, "DELETE", {
+    message: "删除题库 " + fileName,
+    sha: sha
+  });
+}
+function ghRenderManifestList(){
+  var el = document.getElementById("gh-manifest-list");
+  if(!el) return;
+  var m = ghManifestState;
+  if(!m){ el.innerHTML = '<div class="p-empty">尚未读取仓库清单</div>'; return; }
+  var arr = (m.json && m.json.banks) || [];
+  if(!arr.length){ el.innerHTML = '<div class="p-empty">仓库清单为空，可先上传题库</div>'; return; }
+  var h = '<div class="bank-list">';
+  arr.forEach(function(it, i){
+    h += '<div class="bank-item"><div><div class="name">' + esc(it.title || it.id) + (it.enabled ? ' <span class="tag-default">启用中</span>' : ' <span class="tag" style="background:var(--bad-soft);color:var(--bad)">已停用</span>') + "</div>";
+    h += '<div class="meta">文件 ' + esc(it.file || "") + (it.desc ? " · " + esc(it.desc) : "") + "</div></div>";
+    h += '<div class="acts">';
+    h += it.enabled
+      ? '<button class="btn btn-ghost" data-gh-toggle="' + i + '">停用</button>'
+      : '<button class="btn btn-primary" data-gh-toggle="' + i + '">启用</button>';
+    h += '<button class="btn btn-danger" data-gh-del="' + i + '">删除文件</button>';
+    h += "</div></div>";
+  });
+  h += "</div>";
+  el.innerHTML = h;
+  el.querySelectorAll("[data-gh-toggle]").forEach(function(b){
+    b.addEventListener("click", function(){
+      var i = parseInt(b.getAttribute("data-gh-toggle"), 10);
+      var m = ghManifestState;
+      if(!m) return;
+      var it = m.json.banks[i];
+      if(!it) return;
+      it.enabled = !it.enabled;
+      ghWriteManifest(m.json, m.sha).then(function(d){
+        ghManifestState.sha = d.content.sha;
+        ghRenderManifestList();
+        toast("已" + (it.enabled ? "启用" : "停用") + "「" + it.title + "」，正在刷新题库…");
+        loadRemoteBanks();
+      }).catch(function(e){ toast("操作失败：" + e.message); });
+    });
+  });
+  el.querySelectorAll("[data-gh-del]").forEach(function(b){
+    b.addEventListener("click", function(){
+      var i = parseInt(b.getAttribute("data-gh-del"), 10);
+      var m = ghManifestState;
+      if(!m) return;
+      var it = m.json.banks[i];
+      if(!it) return;
+      if(!window.confirm("确定从仓库删除题库「" + it.title + "」（文件 " + it.file + "）并在清单中移除吗？此操作不可恢复，删除后需重新上传才能恢复。")) return;
+      var step = Promise.resolve(null);
+      if(it.file){
+        step = ghGetBankFileMeta(it.file).then(function(meta){ return ghDeleteBankFile(it.file, meta.sha); })
+          .catch(function(e){ if(String(e.message).indexOf("404") > -1) return null; throw e; });
+      }
+      step.then(function(){
+        m.json.banks.splice(i, 1);
+        return ghWriteManifest(m.json, m.sha);
+      }).then(function(d){
+        ghManifestState.sha = d.content.sha;
+        ghRenderManifestList();
+        toast("已删除题库「" + it.title + "」，正在刷新…");
+        loadRemoteBanks();
+      }).catch(function(e){ toast("删除失败：" + e.message); });
+    });
+  });
+}
+function ghLoadManifest(){
+  var el = document.getElementById("gh-manifest-list");
+  if(!el) return;
+  el.innerHTML = '<div class="p-empty">正在读取仓库清单…</div>';
+  ghGetManifest().then(function(m){
+    ghManifestState = m;
+    ghRenderManifestList();
+  }).catch(function(e){
+    el.innerHTML = '<div class="p-empty" style="color:var(--bad)">读取清单失败：' + esc(e.message) + "</div>";
+  });
+}
+function ghUploadBank(){
+  var nameInput = document.getElementById("gh-file-name-input");
+  var fileName = (nameInput ? nameInput.value : "").trim();
+  if(!/^[\w\-]+\.json$/.test(fileName)){ toast("文件名需为字母/数字/下划线/连字符并以 .json 结尾"); return; }
+  if(!state.ghUploadText){ toast("请先选择题库 JSON 文件"); return; }
+  var v;
+  try { v = validateBank(JSON.parse(state.ghUploadText)); }
+  catch(e){ toast("题库 JSON 解析失败：" + e.message); return; }
+  if(!v.ok){ toast("题库格式错误：" + v.err); return; }
+  toast("正在上传题库文件…");
+  ghGetBankFileMeta(fileName).then(function(meta){ return ghPutBankFile(fileName, state.ghUploadText, meta.sha); })
+    .catch(function(e){
+      if(String(e.message).indexOf("404") > -1) return ghPutBankFile(fileName, state.ghUploadText, undefined);
+      throw e;
+    })
+    .then(function(){
+      return ghGetManifest();
+    })
+    .then(function(m){
+      var arr = m.json.banks || [];
+      var idx = -1;
+      for(var i = 0; i < arr.length; i++){ if(arr[i].file === fileName){ idx = i; break; } }
+      var item = { id: fileName.replace(/\.json$/i, ""), title: v.title, file: fileName, enabled: true, desc: v.questions.length + " 题" };
+      if(idx > -1) arr[idx] = item; else arr.push(item);
+      return ghWriteManifest(m.json, m.sha);
+    })
+    .then(function(d){
+      ghManifestState = { json: JSON.parse(fromB64(d.content.content)), sha: d.content.sha };
+      ghRenderManifestList();
+      toast("已上传并启用「" + v.title + "」，正在刷新题库…");
+      state.ghUploadText = "";
+      loadRemoteBanks();
+    })
+    .catch(function(e){ toast("上传失败：" + e.message); });
 }
 
 /* ===== 全局状态 ===== */
@@ -1487,6 +1664,22 @@ function renderBankPanel(){
   h += '<div class="btn-row"><button class="btn btn-primary" id="btn-remote-save">保存源地址并重新加载</button></div>';
   h += '</div>';
   h += '<div class="card">';
+  h += '<div class="view-title" style="margin-bottom:8px"><h2>仓库题库管理（管理员直接操作）</h2><span class="muted">配置一次 GitHub Token 后，可在此直接上传 / 停用 / 启用 / 删除仓库里的题库，访客立即生效</span></div>';
+  h += '<div class="field" style="margin-bottom:8px"><label>GitHub Token（仅存本机浏览器，访客不可见）</label><div style="display:flex;gap:8px;margin-top:4px">';
+  h += '<input class="text-input" id="gh-token-input" type="password" placeholder="github_pat_…" value="' + esc(LS.get(K_GH_TOKEN, "")) + '" style="flex:1">';
+  h += '<button class="btn btn-primary" id="btn-gh-token-save">保存并验证</button>';
+  h += '<button class="btn btn-ghost" id="btn-gh-token-clear">清除</button></div></div>';
+  h += '<div class="bank-note" id="gh-identity" style="margin-bottom:10px">' + (LS.get(K_GH_TOKEN, "") ? "Token 已保存。" : "未配置 Token — 到 GitHub「Settings → Developer settings → Personal access tokens (classic)」生成一个，权限勾选 <b>repo</b>，粘贴保存即可管理。") + '</div>';
+  h += '<div style="font-size:14px;font-weight:700;margin-bottom:6px">上传新题库到仓库</div>';
+  h += '<div class="btn-row" style="margin-bottom:8px"><label class="btn btn-ghost" style="cursor:pointer">选择题库 JSON<input type="file" id="gh-file" accept=".json,application/json" style="display:none"></label>';
+  h += '<span id="gh-file-name" class="muted" style="align-self:center">未选择文件</span></div>';
+  h += '<div class="field" style="margin-bottom:8px"><label>仓库文件名（.json）</label><input class="text-input" id="gh-file-name-input" placeholder="如 zzp2000.json（字母/数字/_/-）" style="width:100%"></div>';
+  h += '<div class="btn-row"><button class="btn btn-primary" id="btn-gh-upload">上传并启用</button><span id="gh-upload-preview" class="muted" style="align-self:center"></span></div>';
+  h += '<div style="font-size:14px;font-weight:700;margin:14px 0 6px">仓库清单（停用 = 访客不可用，题库文件保留）</div>';
+  h += '<div id="gh-manifest-list"><div class="p-empty">尚未读取仓库清单</div></div>';
+  h += '<div class="btn-row" style="margin-top:8px"><button class="btn btn-ghost" id="btn-gh-refresh">刷新清单</button><button class="btn btn-ghost" id="btn-gh-open">打开仓库 banks 目录</button></div>';
+  h += '</div>';
+  h += '<div class="card">';
   h += '<div class="bank-head"><h2>我的题库（' + localBankCount() + " 个）</h2><span class='spacer'></span>";
   h += '<button class="btn btn-ghost" id="btn-change-pw">修改管理密码</button><button class="btn btn-ghost" id="btn-app-lock">访问锁设置</button><button class="btn btn-ghost" id="btn-lock">锁定管理</button></div>';
   if(!state.banks.length){
@@ -1526,6 +1719,62 @@ function renderBankPanel(){
   h += '<div class="import-msg" id="import-msg"></div></div>';
   document.getElementById("bank-box").innerHTML = h;
   renderRemoteBar();
+  if(ghManifestState) ghRenderManifestList();
+
+  var ght = document.getElementById("btn-gh-token-save");
+  if(ght) ght.addEventListener("click", function(){
+    var v = document.getElementById("gh-token-input").value.trim();
+    if(!v){ toast("请输入 Token"); return; }
+    LS.set(K_GH_TOKEN, v);
+    fetch("https://api.github.com/user", { headers: { "Authorization": "Bearer " + v } })
+      .then(function(r){ if(!r.ok) throw new Error("Token 无效（" + r.status + "）"); return r.json(); })
+      .then(function(u){
+        var id = document.getElementById("gh-identity");
+        if(id) id.innerHTML = "已连接 GitHub 账号 <b>" + esc(u.login) + "</b>，将管理仓库 <b>" + esc(ghRepo().owner + "/" + ghRepo().repo) + "</b> 的 banks/ 目录";
+        toast("Token 已保存并验证通过");
+        ghLoadManifest();
+      })
+      .catch(function(e){ toast("Token 验证失败：" + e.message); });
+  });
+  var ghc = document.getElementById("btn-gh-token-clear");
+  if(ghc) ghc.addEventListener("click", function(){
+    LS.set(K_GH_TOKEN, "");
+    document.getElementById("gh-token-input").value = "";
+    var id = document.getElementById("gh-identity");
+    if(id) id.innerHTML = "Token 已清除。";
+    toast("已清除 Token");
+  });
+  var ghf = document.getElementById("gh-file");
+  if(ghf) ghf.addEventListener("change", function(){
+    var f = ghf.files && ghf.files[0];
+    if(!f) return;
+    var reader = new FileReader();
+    reader.onload = function(){
+      var text = String(reader.result);
+      try {
+        var v = validateBank(JSON.parse(text));
+        if(!v.ok){ toast("题库格式错误：" + v.err); state.ghUploadText = ""; return; }
+        state.ghUploadText = text;
+        document.getElementById("gh-file-name").textContent = f.name + "（" + v.title + "，共 " + v.questions.length + " 题）";
+        var ni = document.getElementById("gh-file-name-input");
+        if(ni && !ni.value.trim()){
+          ni.value = f.name.replace(/\.json$/i, "").replace(/[^\w\-]/g, "-").toLowerCase() + ".json";
+        }
+        toast("已读取题库，点「上传并启用」写入仓库");
+      } catch(e){ toast("JSON 解析失败：" + e.message); }
+    };
+    reader.readAsText(f, "utf-8");
+    ghf.value = "";
+  });
+  var ghu = document.getElementById("btn-gh-upload");
+  if(ghu) ghu.addEventListener("click", ghUploadBank);
+  var ghr = document.getElementById("btn-gh-refresh");
+  if(ghr) ghr.addEventListener("click", function(){
+    if(!LS.get(K_GH_TOKEN, "")){ toast("请先保存 GitHub Token"); return; }
+    ghLoadManifest();
+  });
+  var gho = document.getElementById("btn-gh-open");
+  if(gho) gho.addEventListener("click", function(){ window.open(remoteRepoBanksUrl(), "_blank"); });
 
   document.getElementById("btn-change-pw").addEventListener("click", renderChangePw);
   document.getElementById("btn-app-lock").addEventListener("click", renderAppLockAdmin);
