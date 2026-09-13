@@ -7,6 +7,13 @@
       "file": "zzp-2000.json",
       "enabled": true,
       "desc": "2597 题（单选 591 / 判断 1838 / 多选 168）"
+    },
+    {
+      "id": "紫微斗数题库",
+      "title": "紫微斗数断语题库",
+      "file": "紫微斗数题库.json",
+      "enabled": true,
+      "desc": "166 题"
     }
   ]
 }
