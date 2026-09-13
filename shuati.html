@@ -572,7 +572,9 @@ function renderRemoteBar(){
   if(r.status === "loading"){
     h += '<div class="p-empty">正在从仓库加载题库…</div>';
   } else if(r.status === "err"){
-    h += '<div class="p-empty" style="color:var(--bad)">远程题库加载失败：' + esc(r.err) + '</div>';
+    var errMsg = r.err;
+    if(location.protocol === "file:") errMsg += "。本机 file:// 方式受浏览器安全限制无法加载远程题库，请改用在线地址 https://cheanshun.github.io/ziwei/shuati.html 访问";
+    h += '<div class="p-empty" style="color:var(--bad)">远程题库加载失败：' + esc(errMsg) + '</div>';
     h += '<div class="btn-row" style="margin-top:8px"><button class="btn btn-ghost" id="btn-remote-refresh">重新加载</button></div>';
   } else {
     var list = state.banks.filter(isRemoteBank);
@@ -742,7 +744,7 @@ function ghLoadManifest(){
 function ghUploadBank(){
   var nameInput = document.getElementById("gh-file-name-input");
   var fileName = (nameInput ? nameInput.value : "").trim();
-  if(!/^[\w\-]+\.json$/.test(fileName)){ toast("文件名需为字母/数字/下划线/连字符并以 .json 结尾"); return; }
+  if(!/^[\w\-\u4e00-\u9fa5]+\.json$/.test(fileName)){ toast("文件名只能含中文/字母/数字/下划线/连字符，并以 .json 结尾"); return; }
   if(!state.ghUploadText){ toast("请先选择题库 JSON 文件"); return; }
   var v;
   try { v = validateBank(JSON.parse(state.ghUploadText)); }
@@ -1809,7 +1811,7 @@ function renderBankPanel(){
         document.getElementById("gh-file-name").textContent = f.name + "（" + v.title + "，共 " + v.questions.length + " 题）";
         var ni = document.getElementById("gh-file-name-input");
         if(ni && !ni.value.trim()){
-          ni.value = f.name.replace(/\.json$/i, "").replace(/[^\w\-]/g, "-").toLowerCase() + ".json";
+          ni.value = f.name.replace(/\.json$/i, "").replace(/[\/:*?"<>|]+/g, "").trim() + ".json";
         }
         toast("已读取题库，点「上传并启用」写入仓库");
       } catch(e){ toast("JSON 解析失败：" + e.message); }
