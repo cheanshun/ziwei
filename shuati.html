@@ -3104,6 +3104,7 @@ const state = {
   unlocked: false,
   bankEditId: null,
   bankEditKw: "",
+  bankEditPage: 0,
   selectedBankIds: LS.get(K_SEL_BANKS, []),
   level: LS.get(K_LEVEL, {}),
   levelStage: "map",
@@ -3150,37 +3151,102 @@ function hashPass(pw){
   for(var i = 0; i < pw.length; i++){ h = ((h << 5) + h + pw.charCodeAt(i)) >>> 0; }
   return "h" + h.toString(36);
 }
+/* ===== 外部全局密码配置（config.json） =====
+ * 把 index.html 部署到网站（与外网访客同一地址）时，同目录放一个 config.json：
+ *   { "appPass": "zzdp2026", "adminPass": "admin2026" }
+ * 密码是明文、可直接改：管理员在服务器/NAS/共享目录里直接编辑 config.json，
+ * 把密码文字改掉保存，外网所有访客立即改用新密码，旧密码失效。
+ * 也可在界面「访问锁设置 / 管理密码设置」里改密码，页面会自动生成新的
+ * config.json 内容（一键复制）并触发下载，覆盖到网站目录即可。
+ * 本机直接打开文件（file:// 读取不到 config.json）时，自动回退到内置出厂密码。
+ * 密码验证优先级：本机 localStorage 覆盖 → config.json 全局 → 出厂内置。
+ * ===================================================================== */
+var EXTERNAL_CONFIG = "config.json";
+var externalHashes = null; // 内存缓存：{ app: "哈希", admin: "哈希" }
+var externalPlain = null;  // 内存缓存明文：{ app: "明文", admin: "明文" }
+function currentAppHash(){ return (externalHashes && externalHashes.app) || BUILTIN_APP_HASH; }
+function currentAdminHash(){ return (externalHashes && externalHashes.admin) || BUILTIN_ADMIN_HASH; }
+function currentAppPlain(){ return (externalPlain && externalPlain.app) || "zzdp2026"; }
+function currentAdminPlain(){ return (externalPlain && externalPlain.admin) || "admin2026"; }
+function loadExternalConfig(){
+  try{
+    if(!window.fetch) return;
+    fetch(EXTERNAL_CONFIG + "?t=" + Date.now(), { cache: "no-store" })
+      .then(function(r){ if(!r.ok) throw new Error("cfg"); return r.json(); })
+      .then(function(j){
+        if(!j || typeof j !== "object") return;
+        var h = {}, pl = {};
+        if(j.appPassHash){ h.app = String(j.appPassHash); }            // 兼容旧哈希格式
+        else if(j.appPass){ h.app = hashPass(String(j.appPass)); pl.app = String(j.appPass); }
+        if(j.adminPassHash){ h.admin = String(j.adminPassHash); }      // 兼容旧哈希格式
+        else if(j.adminPass){ h.admin = hashPass(String(j.adminPass)); pl.admin = String(j.adminPass); }
+        if(h.app || h.admin){ externalHashes = h; externalPlain = pl; }
+        var box = document.getElementById("app-lock");
+        if(box && !box.hidden) renderAppLock();
+      })
+      .catch(function(){ /* 读取失败保持出厂密码 */ });
+  }catch(e){}
+}
+function buildConfigText(appPlain, adminPlain){
+  return JSON.stringify({ appPass: appPlain, adminPass: adminPlain }, null, 2);
+}
+function downloadConfig(appPlain, adminPlain){
+  var blob = new Blob([buildConfigText(appPlain, adminPlain)], { type: "application/json" });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url; a.download = EXTERNAL_CONFIG;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+}
+
+/* ===== 管理锁（管理员密码，出厂内置 + 全局配置） =====
+ * 出厂管理员密码 admin2026 写死在内置哈希 BUILTIN_ADMIN_HASH 中；若网站目录
+ * 存在 config.json，则以其中的 adminPassHash 为全局管理密码（管理员改后覆盖上传即全局生效）。
+ * 清除浏览器数据也无法自行设置。
+ * ===================================================================== */
+const BUILTIN_ADMIN_HASH = "h9j057c";
 function getLock(){ return LS.get(K_LOCK, null); }
-function hasLock(){ var l = getLock(); return !!(l && l.hash); }
+function hasLock(){ return true; } // 管理员出厂密码内置，管理锁永远存在
 function setLock(pw){ LS.set(K_LOCK, { hash: hashPass(pw) }); }
 function clearLock(){ LS.set(K_LOCK, null); }
-function checkLock(pw){ var l = getLock(); return !!(l && l.hash === hashPass(pw)); }
+function checkLock(pw){
+  var h = hashPass(pw);
+  var l = getLock();
+  if(l && l.hash) return l.hash === h;                 // 本机覆盖的管理密码优先
+  if(externalHashes && externalHashes.admin) return externalHashes.admin === h; // 全局配置
+  return BUILTIN_ADMIN_HASH === h;                     // 否则用出厂管理员密码
+}
 
-/* ===== 整站访问锁（进入系统需密码，管理员在题库管理中维护） ===== */
+/* ===== 整站访问锁（出厂内置 + 全局配置） =====
+ * 出厂访问密码 zzdp2026 写死在内置哈希 BUILTIN_APP_HASH 中；若网站目录存在
+ * config.json，则以其中的 appPassHash 为全局访问密码（管理员改后覆盖上传即全局生效）。
+ * 任何浏览器进入答题系统必须输入密码，清除数据也无法自行设置。
+ * ===================================================================== */
+const BUILTIN_APP_HASH = "h1du5zrr";
 function getAppLock(){ return LS.get(K_APP_LOCK, null); }
-function hasAppLock(){ var l = getAppLock(); return !!(l && l.hash); }
+function hasAppLock(){ return true; } // 出厂密码内置，锁永远存在
 function setAppLock(pw){ LS.set(K_APP_LOCK, { hash: hashPass(pw) }); }
 function clearAppLock(){ LS.set(K_APP_LOCK, null); }
-function checkAppLock(pw){ var l = getAppLock(); return !!(l && l.hash === hashPass(pw)); }
+function checkAppLock(pw){
+  var h = hashPass(pw);
+  var l = getAppLock();
+  if(l && l.hash) return l.hash === h;                 // 本机覆盖密码优先
+  if(externalHashes && externalHashes.app) return externalHashes.app === h; // 全局配置
+  return BUILTIN_APP_HASH === h;                       // 否则用出厂密码
+}
 function renderAppLock(){
   var box = document.getElementById("app-lock");
   if(!box) return;
-  var locked = hasAppLock();
   box.hidden = false;
   var h = '<div class="card">';
   h += '<div class="lock-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>';
-  h += '<h1>' + (locked ? "答题系统已锁定" : "首次使用，请设置访问密码") + '</h1>';
-  h += '<p class="sub">' + (locked ? "请输入访问密码进入答题系统" : "设置后，每次进入本系统都需要输入密码；只有题库管理中的管理员可以修改") + '</p>';
-  if(locked){
-    h += '<div class="field"><label>访问密码</label><input type="password" class="text-input" id="app-lock-pw" placeholder="输入访问密码" autocomplete="off" style="font-size:16px"></div>';
-    h += '<button class="btn btn-primary btn-lg" id="btn-app-unlock" style="width:100%">进入系统</button>';
-    h += '<div class="lock-note">忘记密码：需清除浏览器中本站点的数据（会同时清空题库与成绩记录）。</div>';
-  } else {
-    h += '<div class="field"><label>设置密码（至少 4 位）</label><input type="password" class="text-input" id="app-pw1" placeholder="设置访问密码" autocomplete="off" style="font-size:16px"></div>';
-    h += '<div class="field"><label>确认密码</label><input type="password" class="text-input" id="app-pw2" placeholder="再次输入密码" autocomplete="off" style="font-size:16px"></div>';
-    h += '<button class="btn btn-primary btn-lg" id="btn-app-set" style="width:100%">设置并进入</button>';
-    h += '<div class="lock-note">请牢记密码；忘记密码需清除浏览器中本站点的数据（会同时清空题库与成绩记录）。</div>';
-  }
+  h += '<h1>答题系统已锁定</h1>';
+  h += '<p class="sub">本系统需要访问密码才能进入；清除浏览器数据不会解除锁定，密码由管理员全局设置</p>';
+  h += '<div class="field"><label>访问密码</label><input type="password" class="text-input" id="app-lock-pw" placeholder="输入访问密码" autocomplete="off" style="font-size:16px"></div>';
+  h += '<button class="btn btn-primary btn-lg" id="btn-app-unlock" style="width:100%">进入系统</button>';
+  h += '<div class="lock-note">忘记密码：请联系管理员获取出厂访问密码。</div>';
   h += "</div>";
   box.innerHTML = h;
   var unlock = document.getElementById("btn-app-unlock");
@@ -3190,18 +3256,8 @@ function renderAppLock(){
     if(checkAppLock(pw)){ box.hidden = true; toast("欢迎回来"); }
     else { toast("密码错误"); document.getElementById("app-lock-pw").value = ""; }
   });
-  var setl = document.getElementById("btn-app-set");
-  if(setl) setl.addEventListener("click", function(){
-    var p1 = document.getElementById("app-pw1").value;
-    var p2 = document.getElementById("app-pw2").value;
-    if(p1.length < 4){ toast("密码至少 4 位"); return; }
-    if(p1 !== p2){ toast("两次输入的密码不一致"); return; }
-    setAppLock(p1);
-    box.hidden = true;
-    toast("访问密码已设置");
-  });
-  var ip = document.getElementById("app-lock-pw") || document.getElementById("app-pw1");
-  if(ip) ip.addEventListener("keydown", function(e){ if(e.key === "Enter"){ var b = document.getElementById("btn-app-unlock") || document.getElementById("btn-app-set"); if(b) b.click(); } });
+  var ip = document.getElementById("app-lock-pw");
+  if(ip) ip.addEventListener("keydown", function(e){ if(e.key === "Enter"){ var b = document.getElementById("btn-app-unlock"); if(b) b.click(); } });
 }
 
 /* ===== 工具函数 ===== */
@@ -3793,20 +3849,11 @@ function renderBankBox(){
 function renderLockScreen(){
   var h = '<div class="card lock-panel">';
   h += '<div class="lock-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>';
-  if(hasLock()){
-    h += '<h2 style="text-align:center;font-size:18px">题库管理已锁定</h2>';
-    h += '<p class="muted" style="text-align:center;font-size:13.5px;margin:6px 0 16px">请输入管理密码解锁，才能导入、删除、导出题库</p>';
-    h += '<div class="field"><label>管理密码</label><input type="password" class="text-input" id="lock-pw" placeholder="输入管理密码" autocomplete="off"></div>';
-    h += '<button class="btn btn-primary btn-lg" id="btn-unlock" style="width:100%">解锁</button>';
-    h += '<div class="lock-note">忘记密码：需清除浏览器中本站点的数据（会同时清空题库与成绩记录）。</div>';
-  } else {
-    h += '<h2 style="text-align:center;font-size:18px">为题库管理设置密码</h2>';
-    h += '<p class="muted" style="text-align:center;font-size:13.5px;margin:6px 0 16px">设置后，进入题库管理需输入密码；考试与刷题不受影响</p>';
-    h += '<div class="field"><label>设置密码（至少 4 位）</label><input type="password" class="text-input" id="pw1" placeholder="设置管理密码" autocomplete="off"></div>';
-    h += '<div class="field"><label>确认密码</label><input type="password" class="text-input" id="pw2" placeholder="再次输入密码" autocomplete="off"></div>';
-    h += '<button class="btn btn-primary btn-lg" id="btn-set-lock" style="width:100%">设置并进入</button>';
-    h += '<div class="lock-note">请牢记密码；忘记密码需清除浏览器中本站点的数据（会同时清空题库与成绩记录）。</div>';
-  }
+  h += '<h2 style="text-align:center;font-size:18px">题库管理已锁定</h2>';
+  h += '<p class="muted" style="text-align:center;font-size:13.5px;margin:6px 0 16px">请输入管理密码（管理员）解锁，才能导入、删除、导出题库、修改访问密码</p>';
+  h += '<div class="field"><label>管理密码</label><input type="password" class="text-input" id="lock-pw" placeholder="输入管理密码" autocomplete="off"></div>';
+  h += '<button class="btn btn-primary btn-lg" id="btn-unlock" style="width:100%">解锁</button>';
+  h += '<div class="lock-note">清除浏览器数据不会解除管理锁；忘记密码请联系管理员。</div>';
   h += "</div>";
   document.getElementById("bank-box").innerHTML = h;
 
@@ -3817,28 +3864,21 @@ function renderLockScreen(){
     if(checkLock(pw)){ state.unlocked = true; renderBankPanel(); }
     else { toast("密码错误"); }
   });
-  var setl = document.getElementById("btn-set-lock");
-  if(setl) setl.addEventListener("click", function(){
-    var p1 = document.getElementById("pw1").value;
-    var p2 = document.getElementById("pw2").value;
-    if(p1.length < 4){ toast("密码至少 4 位"); return; }
-    if(p1 !== p2){ toast("两次输入的密码不一致"); return; }
-    setLock(p1);
-    state.unlocked = true;
-    toast("管理密码已设置");
-    renderBankPanel();
-  });
+  var lk = document.getElementById("lock-pw");
+  if(lk) lk.addEventListener("keydown", function(e){ if(e.key === "Enter"){ var b = document.getElementById("btn-unlock"); if(b) b.click(); } });
 }
 
 function renderChangePw(){
   var h = '<div class="card lock-panel">';
   h += '<div class="lock-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><path d="M12 15v3"/></svg></div>';
-  h += '<h2 style="text-align:center;font-size:18px">修改管理密码</h2>';
-  h += '<p class="muted" style="text-align:center;font-size:13.5px;margin:6px 0 16px">先验证原密码，再设置新密码</p>';
-  h += '<div class="field"><label>原密码</label><input type="password" class="text-input" id="old-pw" autocomplete="off"></div>';
+  h += '<h2 style="text-align:center;font-size:18px">管理密码设置（全局）</h2>';
+  h += '<p class="muted" style="text-align:center;font-size:13.5px;margin:6px 0 16px">修改后本机立即生效；把下方生成的 config.json 内容覆盖到网站目录（或直接改网站上的 config.json 文件），外网所有访客的管理密码即更新</p>';
+  h += '<div class="field"><label>当前密码</label><input type="password" class="text-input" id="old-pw" autocomplete="off" placeholder="当前生效的管理密码"></div>';
   h += '<div class="field"><label>新密码（至少 4 位）</label><input type="password" class="text-input" id="new-pw1" autocomplete="off"></div>';
   h += '<div class="field"><label>确认新密码</label><input type="password" class="text-input" id="new-pw2" autocomplete="off"></div>';
-  h += '<div class="btn-row"><button class="btn btn-primary" id="btn-save-pw">保存</button><button class="btn btn-ghost" id="btn-cancel-pw">返回</button></div>';
+  h += '<div class="btn-row"><button class="btn btn-primary" id="btn-save-pw">修改并生成全局配置</button><button class="btn btn-ghost" id="btn-reset-pw">恢复出厂并生成</button><button class="btn btn-ghost" id="btn-cancel-pw">返回</button></div>';
+  h += '<div class="field"><label>新的 config.json 内容（点击复制）</label><textarea class="json-input" id="cfg-out" readonly style="min-height:64px;background:#fafafa"></textarea></div>';
+  h += '<div class="lock-note">最直接的方式：在服务器/NAS/共享目录里打开 config.json，把 adminPass 的密码文字改成新密码保存即可；或把上方内容整段复制覆盖 config.json。</div>';
   h += '<div class="import-msg" id="import-msg"></div></div>';
   document.getElementById("bank-box").innerHTML = h;
 
@@ -3847,55 +3887,75 @@ function renderChangePw(){
     var old = document.getElementById("old-pw").value;
     var n1 = document.getElementById("new-pw1").value;
     var n2 = document.getElementById("new-pw2").value;
-    if(!checkLock(old)){ toast("原密码错误"); return; }
+    if(!checkLock(old)){ toast("当前密码错误"); return; }
     if(n1.length < 4){ toast("新密码至少 4 位"); return; }
     if(n1 !== n2){ toast("两次输入的新密码不一致"); return; }
     setLock(n1);
-    toast("管理密码已修改");
-    renderBankPanel();
+    var txt = buildConfigText(currentAppPlain(), n1);
+    var out = document.getElementById("cfg-out");
+    if(out){ out.value = txt; out.select(); }
+    downloadConfig(currentAppPlain(), n1);
+    toast("管理密码已修改（本机生效）；复制或下载上方 config.json 覆盖到网站目录");
+  });
+  var rp = document.getElementById("btn-reset-pw");
+  if(rp) rp.addEventListener("click", function(){
+    var old = document.getElementById("old-pw").value;
+    if(!checkLock(old)){ toast("当前密码错误"); return; }
+    if(!window.confirm("确定恢复出厂管理密码（admin2026）吗？将生成出厂版 config.json 供你覆盖。")) return;
+    clearLock();
+    var txt = buildConfigText(currentAppPlain(), "admin2026");
+    var out = document.getElementById("cfg-out");
+    if(out){ out.value = txt; out.select(); }
+    downloadConfig(currentAppPlain(), "admin2026");
+    toast("已恢复出厂管理密码；复制或下载上方 config.json 覆盖到网站目录");
   });
 }
 /* ===== 整站访问锁管理（管理员维护：查看 / 修改 / 取消） ===== */
 function renderAppLockAdmin(){
-  var on = hasAppLock();
   var h = '<div class="card lock-panel">';
   h += '<div class="lock-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>';
-  h += '<h2 style="text-align:center;font-size:18px">整站访问锁设置</h2>';
-  h += '<p class="muted" style="text-align:center;font-size:13.5px;margin:6px 0 16px">' + (on ? "访问锁已开启：进入答题系统需输入访问密码" : "访问锁未开启：任何人都可直接进入答题系统") + "</p>";
-  if(on){
-    h += '<div class="field"><label>当前访问密码</label><input type="password" class="text-input" id="app-old-pw" autocomplete="off"></div>';
-  }
-  h += '<div class="field"><label>' + (on ? "新密码（至少 4 位）" : "设置密码（至少 4 位）") + '</label><input type="password" class="text-input" id="app-new-pw1" autocomplete="off"></div>';
+  h += '<h2 style="text-align:center;font-size:18px">访问密码设置（全局）</h2>';
+  h += '<p class="muted" style="text-align:center;font-size:13.5px;margin:6px 0 16px">修改后本机立即生效；把下方生成的 config.json 内容覆盖到网站目录（或直接改网站上的 config.json 文件），外网访客用老密码将无法进入</p>';
+  h += '<div class="field"><label>当前访问密码</label><input type="password" class="text-input" id="app-old-pw" autocomplete="off" placeholder="当前生效的访问密码"></div>';
+  h += '<div class="field"><label>新密码（至少 4 位）</label><input type="password" class="text-input" id="app-new-pw1" autocomplete="off"></div>';
   h += '<div class="field"><label>确认新密码</label><input type="password" class="text-input" id="app-new-pw2" autocomplete="off"></div>';
   h += '<div class="btn-row">';
-  h += '<button class="btn btn-primary" id="btn-app-save">' + (on ? "保存新密码" : "开启访问锁") + "</button>";
-  if(on) h += '<button class="btn btn-danger" id="btn-app-off">取消访问锁</button>';
+  h += '<button class="btn btn-primary" id="btn-app-save">修改并生成全局配置</button>';
+  h += '<button class="btn btn-ghost" id="btn-app-reset">恢复出厂并生成</button>';
   h += '<button class="btn btn-ghost" id="btn-app-back">返回</button>';
   h += "</div>";
+  h += '<div class="field"><label>新的 config.json 内容（点击复制）</label><textarea class="json-input" id="cfg-out" readonly style="min-height:64px;background:#fafafa"></textarea></div>';
+  h += '<div class="lock-note">最直接的方式：在服务器/NAS/共享目录里打开 config.json，把 appPass 的密码文字改成新密码保存即可；或把上方内容整段复制覆盖 config.json。</div>';
   h += '<div class="import-msg" id="import-msg"></div></div>';
   document.getElementById("bank-box").innerHTML = h;
 
   document.getElementById("btn-app-back").addEventListener("click", renderBankPanel);
   var save = document.getElementById("btn-app-save");
   if(save) save.addEventListener("click", function(){
-    var old = on ? document.getElementById("app-old-pw").value : null;
-    if(on && !checkAppLock(old)){ toast("当前访问密码错误"); return; }
+    var old = document.getElementById("app-old-pw").value;
+    if(!checkAppLock(old)){ toast("当前访问密码错误"); return; }
     var n1 = document.getElementById("app-new-pw1").value;
     var n2 = document.getElementById("app-new-pw2").value;
     if(n1.length < 4){ toast("新密码至少 4 位"); return; }
     if(n1 !== n2){ toast("两次输入的新密码不一致"); return; }
     setAppLock(n1);
-    toast(on ? "访问密码已修改" : "访问锁已开启");
-    renderBankPanel();
+    var txt = buildConfigText(n1, currentAdminPlain());
+    var out = document.getElementById("cfg-out");
+    if(out){ out.value = txt; out.select(); }
+    downloadConfig(n1, currentAdminPlain());
+    toast("访问密码已修改（本机生效）；复制或下载上方 config.json 覆盖到网站目录");
   });
-  var off = document.getElementById("btn-app-off");
-  if(off) off.addEventListener("click", function(){
+  var reset = document.getElementById("btn-app-reset");
+  if(reset) reset.addEventListener("click", function(){
     var old = document.getElementById("app-old-pw").value;
     if(!checkAppLock(old)){ toast("当前访问密码错误"); return; }
-    if(!window.confirm("确定取消整站访问锁吗？之后任何人都可直接进入本系统。")) return;
+    if(!window.confirm("确定恢复出厂访问密码（zzdp2026）吗？将生成出厂版 config.json 供你覆盖。")) return;
     clearAppLock();
-    toast("访问锁已取消");
-    renderBankPanel();
+    var txt = buildConfigText("zzdp2026", currentAdminPlain());
+    var out = document.getElementById("cfg-out");
+    if(out){ out.value = txt; out.select(); }
+    downloadConfig("zzdp2026", currentAdminPlain());
+    toast("已恢复出厂访问密码；复制或下载上方 config.json 覆盖到网站目录");
   });
 }
 
@@ -4031,18 +4091,38 @@ function renderBankPanel(){
 function renderBankEditor(){
   var bank = getBankById(state.bankEditId);
   if(!bank){ state.bankEditId = null; renderBankPanel(); return; }
+  var all = bank.questions;
+  var raw = (state.bankEditKw || "").trim().toLowerCase();
+  var kws = raw ? raw.split(/\s+/) : [];
+  var idxs = [];
+  for(var ii = 0; ii < all.length; ii++){
+    if(!kws.length){ idxs.push(ii); continue; }
+    var parts = [all[ii].text || ""].concat(all[ii].options || []).concat([all[ii].explain || ""]);
+    var txt = parts.join(" ").toLowerCase();
+    var hit = true;
+    for(var ki = 0; ki < kws.length; ki++){ if(txt.indexOf(kws[ki]) < 0){ hit = false; break; } }
+    if(hit) idxs.push(ii);
+  }
+  var pageSize = 40;
+  var pages = Math.max(1, Math.ceil(idxs.length / pageSize));
+  if(state.bankEditPage >= pages) state.bankEditPage = pages - 1;
+  if(state.bankEditPage < 0) state.bankEditPage = 0;
+  var start = state.bankEditPage * pageSize;
+  var pageIdxs = idxs.slice(start, start + pageSize);
+
   var h = "";
   h += '<div class="card"><div class="bank-head"><h2>编辑题库：' + esc(bank.title) + '</h2><span class="spacer"></span>';
   h += '<button class="btn btn-ghost" id="btn-edit-back">返回题库管理</button>';
   h += '<button class="btn btn-primary" id="btn-edit-save">保存修改</button></div>';
-  h += '<div class="bank-note">修改后点「保存修改」生效；选项可增删，答案请勾选正确项。单选题/判断题只勾 1 个，多选题可勾多个。</div></div>';
+  h += '<div class="bank-note">修改后点「保存修改」生效；选项可增删，答案请勾选正确项。单选题/判断题只勾 1 个，多选题可勾多个。每页显示 40 题，翻页前修改会自动保留。</div></div>';
   h += '<div class="card"><div class="edit-search-row">';
   h += '<input class="text-input" id="edit-search" placeholder="搜索题干 / 选项 / 解析…（输入即过滤）" autocomplete="off">';
   h += '<span class="muted small" id="edit-search-count" style="flex:none"></span></div></div>';
   h += '<div id="edit-q-list">';
-  bank.questions.forEach(function(q, i){
-    h += '<div class="card edit-q-card" data-qi="' + i + '">';
-    h += '<div class="edit-q-head"><b>第 ' + (i + 1) + ' 题</b><span class="spacer"></span><button class="btn btn-danger" data-delq="' + i + '">删除本题</button></div>';
+  pageIdxs.forEach(function(qi){
+    var q = all[qi];
+    h += '<div class="card edit-q-card" data-qi="' + qi + '">';
+    h += '<div class="edit-q-head"><b>第 ' + (qi + 1) + ' 题</b><span class="spacer"></span><button class="btn btn-danger" data-delq="' + qi + '">删除本题</button></div>';
     h += '<div class="field"><label>题型</label><select class="select" data-f="type">' +
          '<option value="single"' + (q.type === "single" ? " selected" : "") + '>单选题</option>' +
          '<option value="multiple"' + (q.type === "multiple" ? " selected" : "") + '>多选题</option>' +
@@ -4052,18 +4132,23 @@ function renderBankEditor(){
     q.options.forEach(function(opt, oi){
       var checked = q.answer.indexOf(oi) >= 0;
       h += '<div class="edit-opt-row">';
-      h += '<input type="' + (q.type === "multiple" ? "checkbox" : "radio") + '" name="e-ans-' + i + '" data-f="ans"' + (checked ? " checked" : "") + '>';
+      h += '<input type="' + (q.type === "multiple" ? "checkbox" : "radio") + '" name="e-ans-' + qi + '" data-f="ans"' + (checked ? " checked" : "") + '>';
       h += '<input class="text-input" data-f="opt" value="' + esc(opt) + '">';
-      h += '<button class="btn btn-ghost" data-delopt="' + i + '">删</button>';
+      h += '<button class="btn btn-ghost" data-delopt="' + qi + '">删</button>';
       h += '</div>';
     });
-    h += '<div class="btn-row" style="margin-top:6px"><button class="btn btn-ghost" data-addopt="' + i + '">+ 添加选项</button></div></div>';
+    h += '<div class="btn-row" style="margin-top:6px"><button class="btn btn-ghost" data-addopt="' + qi + '">+ 添加选项</button></div></div>';
     h += '<div class="field"><label>解析（可选）</label><textarea class="json-input" data-f="explain" style="min-height:48px">' + esc(q.explain || "") + '</textarea></div>';
     h += '</div>';
   });
   h += '</div>';
+  h += '<div class="pager"><button class="btn btn-ghost" id="btn-edit-prev"' + (state.bankEditPage <= 0 ? " disabled" : "") + '>上一页</button>';
+  h += '<span class="pager-info">第 ' + (state.bankEditPage + 1) + " / " + pages + " 页 · 显示 " + idxs.length + " / " + all.length + " 题 · 每页 " + pageSize + " 题</span>";
+  h += '<button class="btn btn-ghost" id="btn-edit-next"' + (state.bankEditPage >= pages - 1 ? " disabled" : "") + '>下一页</button></div>';
   h += '<div class="card"><div class="btn-row"><button class="btn btn-ghost" id="btn-add-q">+ 新增一题</button><span class="spacer"></span><button class="btn btn-primary" id="btn-edit-save2">保存修改</button></div></div>';
   document.getElementById("bank-box").innerHTML = h;
+  var sc = document.getElementById("edit-search-count");
+  if(sc) sc.textContent = kws.length ? "显示 " + idxs.length + " / " + all.length + " 题" : "共 " + all.length + " 题";
 
   var box = document.getElementById("bank-box");
   box.removeEventListener("click", bankEditClick);
@@ -4084,55 +4169,45 @@ function renderBankEditor(){
     syncBankEditorFromDOM();
     state.bankEditKw = "";
     bank.questions.push({ id: uid(), type: "single", text: "", options: ["", ""], answer: [0], explain: "" });
+    state.bankEditPage = Math.ceil(bank.questions.length / 40) - 1;
     renderBankEditor();
   });
   var search = document.getElementById("edit-search");
   if(search){
     search.value = state.bankEditKw || "";
     search.addEventListener("input", function(){
+      syncBankEditorFromDOM();
       state.bankEditKw = search.value;
-      applyBankEditFilter();
+      state.bankEditPage = 0;
+      var pos = search.selectionStart;
+      renderBankEditor();
+      var ns = document.getElementById("edit-search");
+      if(ns){ ns.focus(); ns.setSelectionRange(pos, pos); }
     });
   }
-  applyBankEditFilter();
-}
-
-/* 题库编辑器：按关键词过滤题干/选项/解析，隐藏不匹配的题卡；空格分隔多个词需全部命中 */
-function applyBankEditFilter(){
-  var raw = (state.bankEditKw || "").trim().toLowerCase();
-  var kws = raw ? raw.split(/\s+/) : [];
-  var cards = document.querySelectorAll("#bank-box .edit-q-card");
-  var shown = 0;
-  cards.forEach(function(card){
-    if(!kws.length){
-      card.style.display = "";
-      shown++;
-      return;
-    }
-    var parts = [];
-    var t = card.querySelector('[data-f="text"]');
-    if(t) parts.push(t.value || "");
-    card.querySelectorAll('[data-f="opt"]').forEach(function(o){ parts.push(o.value || ""); });
-    var e = card.querySelector('[data-f="explain"]');
-    if(e) parts.push(e.value || "");
-    var text = parts.join(" ").toLowerCase();
-    var hit = true;
-    for(var i = 0; i < kws.length; i++){ if(text.indexOf(kws[i]) < 0){ hit = false; break; } }
-    card.style.display = hit ? "" : "none";
-    if(hit) shown++;
+  var prevBtn = document.getElementById("btn-edit-prev");
+  if(prevBtn) prevBtn.addEventListener("click", function(){
+    if(state.bankEditPage > 0){ syncBankEditorFromDOM(); state.bankEditPage--; renderBankEditor(); window.scrollTo(0, 0); }
   });
-  var cnt = document.getElementById("edit-search-count");
-  if(cnt) cnt.textContent = kws.length ? "显示 " + shown + " / " + cards.length + " 题" : "共 " + cards.length + " 题";
+  var nextBtn = document.getElementById("btn-edit-next");
+  if(nextBtn) nextBtn.addEventListener("click", function(){
+    var pages = Math.max(1, Math.ceil(idxs.length / 40));
+    if(state.bankEditPage < pages - 1){ syncBankEditorFromDOM(); state.bankEditPage++; renderBankEditor(); window.scrollTo(0, 0); }
+  });
 }
 
-/* 从 DOM 回读当前编辑内容到题库副本（不校验、不过滤，用于增删后的重渲染） */
+/* 编辑器过滤已并入 renderBankEditor（按数组过滤 + 分页），此函数不再使用 */
+function applyBankEditFilter(){ renderBankEditor(); }
+
+/* 从 DOM 回读当前可见页的编辑内容到题库数组（按 data-qi 定位，不重建数组） */
 function syncBankEditorFromDOM(){
   var bank = getBankById(state.bankEditId);
   if(!bank) return;
   var cards = document.querySelectorAll("#bank-box .edit-q-card");
-  var qs = [];
-  cards.forEach(function(card, ci){
-    var old = bank.questions[ci] || {};
+  cards.forEach(function(card){
+    var qi = parseInt(card.getAttribute("data-qi"), 10);
+    if(isNaN(qi) || qi < 0 || qi >= bank.questions.length) return;
+    var old = bank.questions[qi] || {};
     var type = card.querySelector('[data-f="type"]').value;
     var text = card.querySelector('[data-f="text"]').value;
     var explain = card.querySelector('[data-f="explain"]').value;
@@ -4142,9 +4217,8 @@ function syncBankEditorFromDOM(){
       opts.push(row.querySelector('[data-f="opt"]').value);
       if(row.querySelector('[data-f="ans"]').checked) ans.push(oi);
     });
-    qs.push({ id: old.id, type: type, text: text, options: opts, answer: ans, explain: explain });
+    bank.questions[qi] = { id: old.id, type: type, text: text, options: opts, answer: ans, explain: explain };
   });
-  bank.questions = qs;
 }
 
 function bankEditClick(ev){
@@ -4199,23 +4273,20 @@ function bankEditChange(ev){
 function saveBankEditor(){
   var bank = getBankById(state.bankEditId);
   if(!bank) return;
-  var cards = document.querySelectorAll("#bank-box .edit-q-card");
-  if(!cards.length){ toast("题库为空，无法保存"); return; }
+  syncBankEditorFromDOM();
+  var qsAll = bank.questions;
+  if(!qsAll.length){ toast("题库为空，无法保存"); return; }
   var qs = [];
   var err = null;
-  cards.forEach(function(card, ci){
+  qsAll.forEach(function(q, ci){
     if(err) return;
-    var type = card.querySelector('[data-f="type"]').value;
-    var text = card.querySelector('[data-f="text"]').value.trim();
-    var explain = card.querySelector('[data-f="explain"]').value.trim();
-    var optRows = card.querySelectorAll(".edit-opt-row");
-    var opts = [], ans = [];
-    for(var oi = 0; oi < optRows.length; oi++){
-      var row = optRows[oi];
-      var val = (row.querySelector('[data-f="opt"]').value || "").trim();
-      if(!val){ err = "第 " + (ci + 1) + " 题：选项 " + letter(oi) + " 不能为空"; return; }
-      opts.push(val);
-      if(row.querySelector('[data-f="ans"]').checked) ans.push(oi);
+    var type = q.type;
+    var text = (q.text || "").trim();
+    var explain = (q.explain || "").trim();
+    var opts = (q.options || []).map(function(o){ return (o || "").trim(); });
+    var ans = q.answer || [];
+    for(var oi = 0; oi < opts.length; oi++){
+      if(!opts[oi]){ err = "第 " + (ci + 1) + " 题：选项 " + letter(oi) + " 不能为空"; return; }
     }
     if(["single","multiple","judge"].indexOf(type) < 0){ err = "第 " + (ci + 1) + " 题：题型无效"; return; }
     if(!text){ err = "第 " + (ci + 1) + " 题：题干不能为空"; return; }
@@ -4227,8 +4298,7 @@ function saveBankEditor(){
     }
     if(!ans.length){ err = "第 " + (ci + 1) + " 题：请勾选正确答案"; return; }
     if(type !== "multiple" && ans.length !== 1){ err = "第 " + (ci + 1) + " 题：单选/判断题只能勾选 1 个答案"; return; }
-    var old = bank.questions[ci];
-    qs.push({ id: old && old.id ? old.id : uid(), type: type, text: text, options: opts, answer: ans.slice().sort(function(a,b){ return a - b; }), explain: explain });
+    qs.push({ id: q.id || uid(), type: type, text: text, options: opts, answer: ans.slice().sort(function(a,b){ return a - b; }), explain: explain });
   });
   if(err){ toast(err); return; }
   bank.questions = qs;
@@ -4602,6 +4672,7 @@ document.querySelectorAll("#tabs .tab").forEach(function(t){
   t.addEventListener("click", function(){ switchView(t.getAttribute("data-view")); });
 });
 switchView("exam");
+loadExternalConfig();
 renderAppLock();
 </script>
 </body>
