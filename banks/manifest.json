@@ -14,6 +14,13 @@
       "file": "-------------2000.json",
       "enabled": true,
       "desc": "2597 题"
+    },
+    {
+      "id": "------",
+      "title": "紫微斗数断语题库",
+      "file": "------.json",
+      "enabled": true,
+      "desc": "166 题"
     }
   ]
 }
