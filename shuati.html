@@ -212,6 +212,9 @@
   .p-feedback.wrong{background:var(--bad-soft);color:#A23A3A;border:1px solid #F0CFCF}
   .p-feedback b{font-weight:700}
   .p-empty{text-align:center;color:var(--ink-3);padding:46px 0;font-size:14.5px}
+  .pager{display:flex;align-items:center;justify-content:center;gap:14px;margin:18px 0 6px;flex-wrap:wrap}
+  .pager-info{font-size:13.5px;color:var(--ink-2);font-weight:600}
+  .pager .btn[disabled]{opacity:.45;cursor:not-allowed}
 
   /* ===== 题库管理：锁屏 / 面板 ===== */
   .lock-panel{max-width:460px;margin:10px auto}
@@ -316,6 +319,15 @@
   .confetti i{width:9px;height:9px;border-radius:2px;display:block;animation:conf 1.1s ease-in-out infinite alternate}
   @keyframes conf{from{transform:translateY(0) rotate(0)}to{transform:translateY(-10px) rotate(180deg)}}
 
+  /* ===== 整站访问锁（全屏遮罩） ===== */
+  .app-lock{
+    position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(160deg,#F3F8F5 0%,#E8F1EC 60%,#DCEAE3 100%);padding:20px;
+  }
+  .app-lock .card{max-width:440px;width:100%;padding:30px 26px;box-shadow:0 14px 44px rgba(31,73,60,.14)}
+  .app-lock h1{font-size:20px;font-weight:800;text-align:center;margin:0 0 4px;color:var(--ink)}
+  .app-lock .sub{text-align:center;font-size:13.5px;color:var(--ink-3);margin:0 0 20px;line-height:1.7}
+
   /* ===== Toast ===== */
   .toast{
     position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:99;
@@ -343,6 +355,7 @@
 </head>
 <body>
 
+<div id="app-lock" class="app-lock" hidden></div>
 <header class="topbar">
   <div class="topbar-inner">
     <div class="brand">
@@ -3035,6 +3048,7 @@ const K_SETTINGS = "quiz.settings.v1";
 const K_HISTORY = "quiz.history.v1";
 const K_PRACTICE = "quiz.practice.v1";
 const K_LOCK = "quiz.lock.v1";
+const K_APP_LOCK = "quiz.applock.v1";
 const K_LEVEL = "quiz.level.v1";
 const K_SEL_BANKS = "quiz.selbanks.v1";
 const K_OLD_BANK = "quiz.bank.v1";
@@ -3086,6 +3100,7 @@ const state = {
   lastAtt: null,
   practiceFilter: "all",
   practiceKeyword: "",
+  practicePage: 0,
   unlocked: false,
   bankEditId: null,
   bankEditKw: "",
@@ -3140,6 +3155,54 @@ function hasLock(){ var l = getLock(); return !!(l && l.hash); }
 function setLock(pw){ LS.set(K_LOCK, { hash: hashPass(pw) }); }
 function clearLock(){ LS.set(K_LOCK, null); }
 function checkLock(pw){ var l = getLock(); return !!(l && l.hash === hashPass(pw)); }
+
+/* ===== 整站访问锁（进入系统需密码，管理员在题库管理中维护） ===== */
+function getAppLock(){ return LS.get(K_APP_LOCK, null); }
+function hasAppLock(){ var l = getAppLock(); return !!(l && l.hash); }
+function setAppLock(pw){ LS.set(K_APP_LOCK, { hash: hashPass(pw) }); }
+function clearAppLock(){ LS.set(K_APP_LOCK, null); }
+function checkAppLock(pw){ var l = getAppLock(); return !!(l && l.hash === hashPass(pw)); }
+function renderAppLock(){
+  var box = document.getElementById("app-lock");
+  if(!box) return;
+  var locked = hasAppLock();
+  box.hidden = false;
+  var h = '<div class="card">';
+  h += '<div class="lock-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>';
+  h += '<h1>' + (locked ? "答题系统已锁定" : "首次使用，请设置访问密码") + '</h1>';
+  h += '<p class="sub">' + (locked ? "请输入访问密码进入答题系统" : "设置后，每次进入本系统都需要输入密码；只有题库管理中的管理员可以修改") + '</p>';
+  if(locked){
+    h += '<div class="field"><label>访问密码</label><input type="password" class="text-input" id="app-lock-pw" placeholder="输入访问密码" autocomplete="off" style="font-size:16px"></div>';
+    h += '<button class="btn btn-primary btn-lg" id="btn-app-unlock" style="width:100%">进入系统</button>';
+    h += '<div class="lock-note">忘记密码：需清除浏览器中本站点的数据（会同时清空题库与成绩记录）。</div>';
+  } else {
+    h += '<div class="field"><label>设置密码（至少 4 位）</label><input type="password" class="text-input" id="app-pw1" placeholder="设置访问密码" autocomplete="off" style="font-size:16px"></div>';
+    h += '<div class="field"><label>确认密码</label><input type="password" class="text-input" id="app-pw2" placeholder="再次输入密码" autocomplete="off" style="font-size:16px"></div>';
+    h += '<button class="btn btn-primary btn-lg" id="btn-app-set" style="width:100%">设置并进入</button>';
+    h += '<div class="lock-note">请牢记密码；忘记密码需清除浏览器中本站点的数据（会同时清空题库与成绩记录）。</div>';
+  }
+  h += "</div>";
+  box.innerHTML = h;
+  var unlock = document.getElementById("btn-app-unlock");
+  if(unlock) unlock.addEventListener("click", function(){
+    var pw = document.getElementById("app-lock-pw").value;
+    if(!pw){ toast("请输入密码"); return; }
+    if(checkAppLock(pw)){ box.hidden = true; toast("欢迎回来"); }
+    else { toast("密码错误"); document.getElementById("app-lock-pw").value = ""; }
+  });
+  var setl = document.getElementById("btn-app-set");
+  if(setl) setl.addEventListener("click", function(){
+    var p1 = document.getElementById("app-pw1").value;
+    var p2 = document.getElementById("app-pw2").value;
+    if(p1.length < 4){ toast("密码至少 4 位"); return; }
+    if(p1 !== p2){ toast("两次输入的密码不一致"); return; }
+    setAppLock(p1);
+    box.hidden = true;
+    toast("访问密码已设置");
+  });
+  var ip = document.getElementById("app-lock-pw") || document.getElementById("app-pw1");
+  if(ip) ip.addEventListener("keydown", function(e){ if(e.key === "Enter"){ var b = document.getElementById("btn-app-unlock") || document.getElementById("btn-app-set"); if(b) b.click(); } });
+}
 
 /* ===== 工具函数 ===== */
 function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
@@ -3530,7 +3593,17 @@ function renderPracticeBox(){
   } else if(list.length === 0){
     h += '<div class="card"><div class="p-empty">没有符合条件的题目</div></div>';
   } else {
-    list.forEach(function(q, i){ h += practiceCardHTML(q, i); });
+    var pageSize = 40;
+    var pages = Math.max(1, Math.ceil(list.length / pageSize));
+    if(state.practicePage >= pages) state.practicePage = pages - 1;
+    if(state.practicePage < 0) state.practicePage = 0;
+    var start = state.practicePage * pageSize;
+    var pageQs = list.slice(start, start + pageSize);
+    pageQs.forEach(function(q, j){ h += practiceCardHTML(q, start + j); });
+    h += '<div class="pager"><button class="btn btn-ghost" id="practice-prev"' + (state.practicePage <= 0 ? " disabled" : "") + '>上一页</button>';
+    h += '<span class="pager-info">第 ' + (state.practicePage + 1) + " / " + pages + " 页 · 共 " + list.length + " 题 · 每页 " + pageSize + " 题</span>";
+    h += '<button class="btn btn-ghost" id="practice-next"' + (state.practicePage >= pages - 1 ? " disabled" : "") + '>下一页</button></div>';
+    state.practicePages = pages;
   }
   document.getElementById("practice-box").innerHTML = h;
 
@@ -3539,19 +3612,30 @@ function renderPracticeBox(){
     state.selectedBankId = bankSel.value;
     state.settings.defaultBankId = state.selectedBankId;
     saveSettings();
+    state.practicePage = 0;
     renderPracticeBox();
   });
   document.querySelectorAll("#practice-box .chip").forEach(function(b){
-    b.addEventListener("click", function(){ state.practiceFilter = b.getAttribute("data-f"); renderPracticeBox(); });
+    b.addEventListener("click", function(){ state.practiceFilter = b.getAttribute("data-f"); state.practicePage = 0; renderPracticeBox(); });
   });
   var s = document.getElementById("practice-search");
   if(s) s.addEventListener("input", function(){
     state.practiceKeyword = s.value;
+    state.practicePage = 0;
     renderPracticeBox();
     var ns = document.getElementById("practice-search");
     if(ns){ ns.focus(); ns.setSelectionRange(ns.value.length, ns.value.length); }
   });
-  list.forEach(function(q, i){ bindPracticeCard(bank, q, i); });
+  var prevBtn = document.getElementById("practice-prev");
+  if(prevBtn) prevBtn.addEventListener("click", function(){
+    if(state.practicePage > 0){ state.practicePage--; renderPracticeBox(); window.scrollTo(0, 0); }
+  });
+  var nextBtn = document.getElementById("practice-next");
+  if(nextBtn) nextBtn.addEventListener("click", function(){
+    var pages = state.practicePages || 1;
+    if(state.practicePage < pages - 1){ state.practicePage++; renderPracticeBox(); window.scrollTo(0, 0); }
+  });
+  pageQs.forEach(function(q, j){ bindPracticeCard(bank, q, j); });
 }
 
 function bindPracticeCard(bank, q, idx){
@@ -3771,12 +3855,55 @@ function renderChangePw(){
     renderBankPanel();
   });
 }
+/* ===== 整站访问锁管理（管理员维护：查看 / 修改 / 取消） ===== */
+function renderAppLockAdmin(){
+  var on = hasAppLock();
+  var h = '<div class="card lock-panel">';
+  h += '<div class="lock-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>';
+  h += '<h2 style="text-align:center;font-size:18px">整站访问锁设置</h2>';
+  h += '<p class="muted" style="text-align:center;font-size:13.5px;margin:6px 0 16px">' + (on ? "访问锁已开启：进入答题系统需输入访问密码" : "访问锁未开启：任何人都可直接进入答题系统") + "</p>";
+  if(on){
+    h += '<div class="field"><label>当前访问密码</label><input type="password" class="text-input" id="app-old-pw" autocomplete="off"></div>';
+  }
+  h += '<div class="field"><label>' + (on ? "新密码（至少 4 位）" : "设置密码（至少 4 位）") + '</label><input type="password" class="text-input" id="app-new-pw1" autocomplete="off"></div>';
+  h += '<div class="field"><label>确认新密码</label><input type="password" class="text-input" id="app-new-pw2" autocomplete="off"></div>';
+  h += '<div class="btn-row">';
+  h += '<button class="btn btn-primary" id="btn-app-save">' + (on ? "保存新密码" : "开启访问锁") + "</button>";
+  if(on) h += '<button class="btn btn-danger" id="btn-app-off">取消访问锁</button>';
+  h += '<button class="btn btn-ghost" id="btn-app-back">返回</button>';
+  h += "</div>";
+  h += '<div class="import-msg" id="import-msg"></div></div>';
+  document.getElementById("bank-box").innerHTML = h;
+
+  document.getElementById("btn-app-back").addEventListener("click", renderBankPanel);
+  var save = document.getElementById("btn-app-save");
+  if(save) save.addEventListener("click", function(){
+    var old = on ? document.getElementById("app-old-pw").value : null;
+    if(on && !checkAppLock(old)){ toast("当前访问密码错误"); return; }
+    var n1 = document.getElementById("app-new-pw1").value;
+    var n2 = document.getElementById("app-new-pw2").value;
+    if(n1.length < 4){ toast("新密码至少 4 位"); return; }
+    if(n1 !== n2){ toast("两次输入的新密码不一致"); return; }
+    setAppLock(n1);
+    toast(on ? "访问密码已修改" : "访问锁已开启");
+    renderBankPanel();
+  });
+  var off = document.getElementById("btn-app-off");
+  if(off) off.addEventListener("click", function(){
+    var old = document.getElementById("app-old-pw").value;
+    if(!checkAppLock(old)){ toast("当前访问密码错误"); return; }
+    if(!window.confirm("确定取消整站访问锁吗？之后任何人都可直接进入本系统。")) return;
+    clearAppLock();
+    toast("访问锁已取消");
+    renderBankPanel();
+  });
+}
 
 function renderBankPanel(){
   var h = "";
   h += '<div class="card">';
   h += '<div class="bank-head"><h2>我的题库（' + state.banks.length + " 个）</h2><span class='spacer'></span>";
-  h += '<button class="btn btn-ghost" id="btn-change-pw">修改密码</button><button class="btn btn-ghost" id="btn-lock">锁定管理</button></div>';
+  h += '<button class="btn btn-ghost" id="btn-change-pw">修改管理密码</button><button class="btn btn-ghost" id="btn-app-lock">访问锁设置</button><button class="btn btn-ghost" id="btn-lock">锁定管理</button></div>';
   if(!state.banks.length){
     h += '<div class="p-empty">还没有题库，请在下方导入</div>';
   } else {
@@ -3810,6 +3937,7 @@ function renderBankPanel(){
   document.getElementById("bank-box").innerHTML = h;
 
   document.getElementById("btn-change-pw").addEventListener("click", renderChangePw);
+  document.getElementById("btn-app-lock").addEventListener("click", renderAppLockAdmin);
   document.getElementById("btn-lock").addEventListener("click", function(){ state.unlocked = false; renderLockScreen(); });
   document.querySelectorAll("#bank-box [data-default]").forEach(function(b){
     b.addEventListener("click", function(){
@@ -4474,6 +4602,7 @@ document.querySelectorAll("#tabs .tab").forEach(function(t){
   t.addEventListener("click", function(){ switchView(t.getAttribute("data-view")); });
 });
 switchView("exam");
+renderAppLock();
 </script>
 </body>
 </html>
