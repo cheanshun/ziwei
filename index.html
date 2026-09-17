@@ -142,7 +142,7 @@
     display:grid;
     grid-template-columns:repeat(4,1fr);
     grid-template-rows:repeat(4,minmax(200px,auto));
-    gap:6px;
+    gap:0;
     border:2px solid var(--line);border-radius:12px;
     background:#f5f7f6;
     padding:8px;
@@ -150,9 +150,10 @@
   }
   .cell{
     position:relative;display:flex;flex-direction:column;
-    border:1px solid var(--line);border-radius:8px;
+    border:1px solid var(--line);border-radius:0;
     background:#ffffff;
     padding:5px 8px 6px;overflow:hidden;
+    margin-right:-1px;margin-bottom:-1px;
     transition:box-shadow .2s,border-color .2s;
   }
   .cell.cur{border-color:var(--cinnabar);box-shadow:0 0 0 2px rgba(163,58,44,.16),inset 0 0 18px rgba(163,58,44,.05);}
@@ -294,9 +295,10 @@
   /* 中心面板 */
   .center{
     grid-column:2 / 4;grid-row:2 / 4;
-    border:1px solid var(--line);border-radius:8px;
+    border:1px solid var(--line);border-radius:0;
     background:#ffffff;
     display:flex;flex-direction:column;align-items:center;justify-content:center;
+    margin-right:-1px;margin-bottom:-1px;
     text-align:center;padding:14px;gap:7px;
   }
   .center h2{font-size:24px;letter-spacing:4px;color:var(--cinnabar);font-weight:700;}
