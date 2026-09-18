@@ -142,60 +142,56 @@
     display:grid;
     grid-template-columns:repeat(4,1fr);
     grid-template-rows:repeat(4,minmax(200px,auto));
-    gap:0;
-    border:2px solid var(--line);border-radius:12px;
-    background:#f5f7f6;
-    padding:8px;
+    gap:1px;
+    border:1px solid #aeb9bd;border-radius:6px;
+    background:#aeb9bd;
+    padding:0;
     box-shadow:0 4px 18px rgba(60,80,90,.08);
+    overflow:hidden;
   }
   .cell{
     position:relative;display:flex;flex-direction:column;
-    border:1px solid var(--line);border-radius:0;
-    background:#ffffff;
+    border:none;border-radius:0;
+    background:#fbfcfc;
     padding:5px 8px 6px;overflow:hidden;
-    margin-right:-1px;margin-bottom:-1px;
-    transition:box-shadow .2s,border-color .2s;
+    transition:background .2s;
   }
-  .cell.cur{border-color:var(--cinnabar);box-shadow:0 0 0 2px rgba(163,58,44,.16),inset 0 0 18px rgba(163,58,44,.05);}
-  /* 命宫：单独底色 */
+  /* 命宫：淡红渐变底（无边框） */
   .cell.cur{
-    background:linear-gradient(180deg,#fbece5,#f5ddd3);
-    border-color:var(--cinnabar);
-    box-shadow:0 0 0 2px rgba(163,58,44,.14),inset 0 0 16px rgba(163,58,44,.06);
+    background:linear-gradient(160deg,rgba(163,58,44,.10),rgba(163,58,44,.03)) #fbfcfc;
   }
   /* 三方四正（财帛/官禄/迁移）：与其他宫位颜色区分 */
   .cell.sf{
-    background:linear-gradient(180deg,#faf3e3,#f2e9d2);
-    border-color:var(--gold);
-    box-shadow:inset 0 0 14px rgba(168,132,60,.10);
+    background:linear-gradient(160deg,rgba(154,123,60,.10),rgba(154,123,60,.03)) #fbfcfc;
   }
   /* 层级盘面（大限/流年等）命宫格：层级色淡底标识（大限粉/流年蓝/小限棕/流月青/流日橙/流时紫） */
-  .cell.ming{border-width:2px;}
-  .cell.ming.decadal{background:rgba(210,85,138,.10);border-color:#d2558a;box-shadow:inset 0 0 16px rgba(210,85,138,.10);}
-  .cell.ming.yearly{background:rgba(47,109,179,.10);border-color:#2f6db3;box-shadow:inset 0 0 16px rgba(47,109,179,.10);}
-  .cell.ming.monthly{background:rgba(47,143,106,.10);border-color:#2f8f6a;box-shadow:inset 0 0 16px rgba(47,143,106,.10);}
-  .cell.ming.daily{background:rgba(192,122,47,.10);border-color:#c07a2f;box-shadow:inset 0 0 16px rgba(192,122,47,.10);}
-  .cell.ming.hourly{background:rgba(106,95,176,.10);border-color:#6a5fb0;box-shadow:inset 0 0 16px rgba(106,95,176,.10);}
-  .cell.ming.age{background:rgba(160,138,76,.10);border-color:#a08a4c;box-shadow:inset 0 0 16px rgba(160,138,76,.10);}
+  .cell.ming{border-width:0;border:none;}
+  .cell.ming.decadal{background:linear-gradient(160deg,rgba(210,85,138,.12),rgba(210,85,138,.03)) #fbfcfc;}
+  .cell.ming.yearly{background:linear-gradient(160deg,rgba(47,109,179,.12),rgba(47,109,179,.03)) #fbfcfc;}
+  .cell.ming.monthly{background:linear-gradient(160deg,rgba(47,143,106,.12),rgba(47,143,106,.03)) #fbfcfc;}
+  .cell.ming.daily{background:linear-gradient(160deg,rgba(192,122,47,.12),rgba(192,122,47,.03)) #fbfcfc;}
+  .cell.ming.hourly{background:linear-gradient(160deg,rgba(106,95,176,.12),rgba(106,95,176,.03)) #fbfcfc;}
+  .cell.ming.age{background:linear-gradient(160deg,rgba(160,138,76,.12),rgba(160,138,76,.03)) #fbfcfc;}
   /* 宫位点击高亮：本宫（红） + 三方四正（金橙），叠加于原有底色之上 */
   .cell{cursor:pointer;}
-  .cell.hl{border-color:#d0453a;box-shadow:0 0 0 2px rgba(208,69,58,.5),inset 0 0 0 3px rgba(208,69,58,.25);z-index:2;}
-  .cell.hl::after{content:'';position:absolute;inset:0;background:rgba(208,69,58,.14);border-radius:inherit;pointer-events:none;}
-  .cell.hl-sf{border-color:#c98a2d;box-shadow:0 0 0 2px rgba(201,138,45,.42),inset 0 0 0 3px rgba(201,138,45,.2);}
-  .cell.hl-sf::after{content:'';position:absolute;inset:0;background:rgba(214,158,60,.16);border-radius:inherit;pointer-events:none;}
+  .cell.hl{background:linear-gradient(160deg,rgba(208,69,58,.12),rgba(208,69,58,.04)) #fbfcfc;z-index:2;}
+  .cell.hl::after{content:'';position:absolute;inset:0;background:rgba(208,69,58,.08);border-radius:inherit;pointer-events:none;}
+  .cell.hl-sf{background:linear-gradient(160deg,rgba(201,138,45,.12),rgba(201,138,45,.04)) #fbfcfc;}
+  .cell.hl-sf::after{content:'';position:absolute;inset:0;background:rgba(214,158,60,.08);border-radius:inherit;pointer-events:none;}
   /* 右下角（地支上方）：当前盘面宫名标注（彩色字，大限粉/流年蓝/小限棕/流月青/流日橙/流时紫） */
   .corner-tags{
     position:absolute;right:10px;bottom:32px;z-index:5;
-    display:flex;flex-direction:column;align-items:flex-end;gap:1px;
+    display:flex;flex-direction:row;align-items:flex-end;gap:2px;
     line-height:1.4;text-align:right;
   }
-  .corner-tags .ctag{font-size:14px;font-weight:800;white-space:nowrap;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff;}
-  .corner-tags .ctag.decadal{color:#d2558a;}
-  .corner-tags .ctag.yearly{color:#2f6db3;}
-  .corner-tags .ctag.monthly{color:#2f8f6a;}
-  .corner-tags .ctag.daily{color:#c07a2f;}
-  .corner-tags .ctag.hourly{color:#6a5fb0;}
-  .corner-tags .ctag.age{color:#a08a4c;}
+  .corner-tags .ctag{writing-mode:vertical-rl;font-size:12px;font-weight:700;color:#fff;letter-spacing:1px;
+    padding:2px 3px;border-radius:3px;line-height:1.25;white-space:nowrap;}
+  .corner-tags .ctag.decadal{background:#d2558a;}
+  .corner-tags .ctag.yearly{background:#2f6db3;}
+  .corner-tags .ctag.age{background:#c9a227;}
+  .corner-tags .ctag.monthly{background:#2f8f6a;}
+  .corner-tags .ctag.daily{background:#c07a2f;}
+  .corner-tags .ctag.hourly{background:#6a5fb0;}
   /* 单格主体：三列（左 杂曜/十二神 · 中 主星 · 右 八吉六煞/流耀） */
   .cell-main-area{position:relative;flex:1;display:grid;grid-template-columns:auto 1fr auto;gap:2px;min-height:0;}
   .cell-left{display:flex;flex-direction:column;justify-content:space-between;min-height:0;overflow:hidden;gap:4px;}
@@ -227,7 +223,9 @@
   }
   .vstar{
     writing-mode:vertical-rl;text-orientation:upright;
+    font-family:"Microsoft YaHei","PingFang SC","Noto Sans SC","HarmonyOS Sans SC",sans-serif;
     font-size:18px;line-height:1.15;font-weight:700;letter-spacing:1px;
+    color:#861883;
   }
   /* 亮度、四化：写在主星下方，字号与主星一致 */
   .vstar .b{font-size:18px;color:var(--ink-soft);font-weight:400;}
@@ -295,10 +293,9 @@
   /* 中心面板 */
   .center{
     grid-column:2 / 4;grid-row:2 / 4;
-    border:1px solid var(--line);border-radius:0;
-    background:#ffffff;
+    border:none;border-radius:0;
+    background:#fbfcfc;
     display:flex;flex-direction:column;align-items:center;justify-content:center;
-    margin-right:-1px;margin-bottom:-1px;
     text-align:center;padding:14px;gap:7px;
   }
   .center h2{font-size:24px;letter-spacing:4px;color:var(--cinnabar);font-weight:700;}
